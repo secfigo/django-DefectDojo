@@ -12,6 +12,8 @@ import csv
 import re
 from urlparse import urlparse
 
+from django.core.files.storage import default_storage
+
 from dojo.models import Finding, Endpoint
 
 ################################################################
@@ -71,7 +73,8 @@ def htmltext(blob):
 
 
 def report_writer(report_dic, output_filename):
-    with open(output_filename, "wb") as outFile:
+    # TODO: Clarify whether this function is ever used.
+    with default_storage.open(output_filename, "wb") as outFile:
         csvWriter = utfdictcsv.DictUnicodeWriter(outFile, REPORT_HEADERS,
                                                  quoting=csv.QUOTE_ALL)
         csvWriter.writerow(CUSTOM_HEADERS)

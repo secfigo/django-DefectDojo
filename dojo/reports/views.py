@@ -9,6 +9,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.http import Http404, HttpResponseRedirect, HttpResponseForbidden, \
     JsonResponse
@@ -196,15 +197,14 @@ def download_report(request, rid):
     report = get_object_or_404(Report, id=rid)
     original_filename = report.file.name
     file_path = report.file.path
-    fp = open(file_path, 'rb')
-    response = HttpResponse(fp.read())
-    fp.close()
+    with default_storage.open(file_path, 'rb') as fp:
+        response = HttpResponse(fp.read())
 
     type, encoding = mimetypes.guess_type(original_filename)
     if type is None:
         type = 'application/octet-stream'
     response['Content-Type'] = type
-    response['Content-Length'] = str(os.stat(file_path).st_size)
+    response['Content-Length'] = str(default_storage.size(file_path))
     if encoding is not None:
         response['Content-Encoding'] = encoding
 

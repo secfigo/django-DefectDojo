@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.db.models import Q
 from django.http import HttpResponseRedirect, StreamingHttpResponse, Http404, \
@@ -955,9 +956,9 @@ def download_risk(request, eid, raid):
     else:
         raise PermissionDenied
 
+    # TODO: MEDIA_ROOT is supposed to be an absolute path. Does that interfere with other storage backends than LocalFileStorage?
     response = StreamingHttpResponse(
-        FileIterWrapper(
-            open(settings.MEDIA_ROOT + "/" + risk_approval.path.name)))
+        FileIterWrapper(default_storage.open(risk_approval.path.name)))
     response['Content-Disposition'] = 'attachment; filename="%s"' \
                                       % risk_approval.filename()
     mimetype, encoding = mimetypes.guess_type(risk_approval.path.name)
@@ -1011,7 +1012,8 @@ def view_threatmodel(request, eid):
     mimetypes.init()
     eng = get_object_or_404(Engagement, pk=eid)
     mimetype, encoding = mimetypes.guess_type(eng.tmodel_path)
-    response = StreamingHttpResponse(FileIterWrapper(open(eng.tmodel_path)))
+    response = StreamingHttpResponse(
+        FileIterWrapper(default_storage.open(eng.tmodel_path)))
     fileName, fileExtension = os.path.splitext(eng.tmodel_path)
     response[
         'Content-Disposition'] = 'attachment; filename=threatmodel' + fileExtension

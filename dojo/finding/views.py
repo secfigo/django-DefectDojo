@@ -6,10 +6,10 @@ import mimetypes
 import os
 import shutil
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.http import Http404, HttpResponse
 from django.http import HttpResponseRedirect, HttpResponseForbidden
@@ -1155,6 +1155,22 @@ def finding_from_template(request, tid):
     template = get_object_or_404(Finding_Template, id=tid)
 
 
+def remove_finding_image_from_storage(finding_image):
+    for image in [finding_image.image,
+                  finding_image.image_thumbnail,
+                  finding_image.image_small,
+                  finding_image.image_medium,
+                  finding_image.image_large]:
+        image_path = os.path.join(settings.MEDIA_ROOT, image.name)
+        if image and default_storage.exists(image_path):
+            try:
+                default_storage.delete(image_path)
+            except NotImplementedError:
+                logger.warning("The configured file storage "
+                               "backend was not able to delete "
+                               "file %s" % image_path)
+
+
 @user_passes_test(lambda u: u.is_staff)
 def manage_images(request, fid):
     finding = get_object_or_404(Finding, id=fid)
@@ -1169,48 +1185,37 @@ def manage_images(request, fid):
 
             images_formset.save()
 
-            for obj in images_formset.deleted_objects:
-                os.remove(settings.MEDIA_ROOT + obj.image.name)
-                if obj.image_thumbnail is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_thumbnail.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_thumbnail.name)
-                if obj.image_medium is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_medium.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_medium.name)
-                if obj.image_large is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_large.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_large.name)
+            for finding_image in images_formset.deleted_objects:
+                remove_finding_image_from_storage(finding_image)
 
-            for obj in images_formset.new_objects:
-                finding.images.add(obj)
+            for finding_image in images_formset.new_objects:
+                finding.images.add(finding_image)
 
-            orphan_images = FindingImage.objects.filter(finding__isnull=True)
-            for obj in orphan_images:
-                os.remove(settings.MEDIA_ROOT + obj.image.name)
-                if obj.image_thumbnail is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_thumbnail.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_thumbnail.name)
-                if obj.image_medium is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_medium.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_medium.name)
-                if obj.image_large is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_large.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_large.name)
-                obj.delete()
+            orphaned_images = FindingImage.objects.filter(finding__isnull=True)
+            for finding_image in orphaned_images:
+                remove_finding_image_from_storage(finding_image)
+                finding_image.delete()
 
-            files = os.listdir(settings.MEDIA_ROOT + 'finding_images')
+            files = default_storage.listdir(FindingImage.UPLOAD_DIRECTORY)
 
             for file in files:
-                with_media_root = settings.MEDIA_ROOT + 'finding_images/' + file
-                with_part_root_only = 'finding_images/' + file
-                if os.path.isfile(with_media_root):
+                image_path_under_media_root = os.path.join(
+                    FindingImage.UPLOAD_DIRECTORY, file)
+                if default_storage.exists(image_path_under_media_root):
                     pic = FindingImage.objects.filter(
-                        image=with_part_root_only)
+                        image=image_path_under_media_root)
 
                     if len(pic) == 0:
-                        os.remove(with_media_root)
-                        cache_to_remove = settings.MEDIA_ROOT + '/CACHE/images/finding_images/' + \
-                                          os.path.splitext(file)[0]
+                        default_storage.delete(image_path_under_media_root)
+
+                        # TODO: Clarify whether we actually write to this cache at some point; if not, this code is not used
+                        # CACHE is used by ImageSpecFields to generate thumbnails and images of different sizes. Clarify, whether there's not a more elegant method
+                        cache_to_remove = os.path.join(settings.MEDIA_ROOT,
+                                                       'CACHE', 'images',
+                                                       'finding_images',
+                                                       os.path.splitext(file)[
+                                                           0])
+                        # TODO: See above TODO about the cache mechanism for finding images
                         if os.path.isdir(cache_to_remove):
                             shutil.rmtree(cache_to_remove)
                     else:
@@ -1282,7 +1287,8 @@ def download_finding_pic(request, token):
     except:
         raise PermissionDenied
 
-    response = StreamingHttpResponse(FileIterWrapper(open(sizes[size].path)))
+    response = StreamingHttpResponse(
+        FileIterWrapper(default_storage.open(sizes[size].path)))
     response['Content-Disposition'] = 'inline'
     mimetype, encoding = mimetypes.guess_type(sizes[size].name)
     response['Content-Type'] = mimetype

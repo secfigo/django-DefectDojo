@@ -3,6 +3,7 @@ import os
 
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404
@@ -697,10 +698,11 @@ def view_selenium(request, ttid):
     print cred.cred_id.selenium_script
     # mimetype, encoding = mimetypes.guess_type(cred.cred_id.selenium_script)
     response = StreamingHttpResponse(
-        FileIterWrapper(open(cred.cred_id.selenium_script)))
+        FileIterWrapper(default_storage.open(cred.cred_id.selenium_script)))
     fileName, fileExtension = os.path.splitext(cred.cred_id.selenium_script)
-    response[
-        'Content-Disposition'] = 'attachment; filename=selenium_script' + fileExtension
+    response['Content-Disposition'] = \
+        'attachment; filename=selenium_script' + fileExtension
+    # TODO: Clarify what mimetypes contains here - from the docs, this seems not to work
     response['Content-Type'] = mimetypes
 
     return response

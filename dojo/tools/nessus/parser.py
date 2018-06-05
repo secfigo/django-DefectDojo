@@ -4,6 +4,7 @@ import re
 from xml.dom import NamespaceErr
 
 from defusedxml import ElementTree
+from django.core.files.storage import default_storage
 
 from dojo.models import Endpoint, Finding
 
@@ -25,15 +26,20 @@ def get_text_severity(severity_id):
 
 class NessusCSVParser(object):
     def __init__(self, filename, test):
-        content = open(filename.temporary_file_path(), "rb").read().replace(
-            "\r", "\n")
+        """
+        Create a NessusCSVParser
+
+        :param TemporaryUploadedFile filename: a File instance
+        :param dojo.models.Test test: a Test object
+        """
+        content = default_storage.open(filename.temporary_file_path(),
+                                       "rb").read().replace("\r", "\n")
         # content = re.sub("\"(.*?)\n(.*?)\"", "\"\1\2\"", content)
         # content = re.sub("(?<=\")\n", "\\\\n", content)
-        with open("%s-filtered" % filename.temporary_file_path(), "wb") as out:
+        with default_storage.open("%s-filtered" % filename.temporary_file_path(), "wb") as out:
             out.write(content)
-            out.close()
 
-        with open("%s-filtered" % filename.temporary_file_path(),
+        with default_storage.open("%s-filtered" % filename.temporary_file_path(),
                   "rb") as scan_file:
             reader = csv.reader(scan_file,
                                 lineterminator="\n",
@@ -141,8 +147,8 @@ class NessusCSVParser(object):
 
                 if endpoint:
                     find.unsaved_endpoints.append(endpoint)
-        os.unlink(filename.temporary_file_path())
-        os.unlink("%s-filtered" % filename.temporary_file_path())
+        default_storage.delete(filename.temporary_file_path())
+        default_storage.delete("%s-filtered" % filename.temporary_file_path())
         self.items = dupes.values()
 
 
@@ -182,7 +188,7 @@ class NessusXMLParser(object):
                     if item.find("plugin_output") is not None:
                         plugin_output = "Plugin Output: " + ip + (
                             (
-                                        ":" + port) if port is not None else "") + " " + item.find(
+                                    ":" + port) if port is not None else "") + " " + item.find(
                             "plugin_output").text + "\n\n"
                         description += plugin_output
 

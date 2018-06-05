@@ -15,6 +15,7 @@ from Crypto.Cipher import AES
 from asteval import Interpreter
 from dateutil.relativedelta import relativedelta, MO
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.core.mail import send_mail
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import get_resolver, reverse
@@ -799,26 +800,20 @@ def get_page_items(request, items, page_size, param_name='page'):
     return page
 
 
-def handle_uploaded_threat(f, eng):
-    name, extension = os.path.splitext(f.name)
-    with open(settings.MEDIA_ROOT + '/threat/%s%s' % (eng.id, extension),
-              'wb+') as destination:
-        for chunk in f.chunks():
+def handle_uploaded_threat(file, engagement):
+    """
+    Handler function for uploading threat model files in the engagement view
+    :param file: file contents
+    :param Engagement engagement: an engagement object
+    """
+    name, extension = os.path.splitext(file.name)
+    threat_file_name = '%s%s' % (engagement.id, extension)
+    threat_file_path = os.path.join('threat', threat_file_name)
+    with default_storage.open(threat_file_path, 'wb+') as destination:
+        for chunk in file.chunks():
             destination.write(chunk)
-    eng.tmodel_path = settings.MEDIA_ROOT + '/threat/%s%s' % (eng.id,
-                                                              extension)
-    eng.save()
-
-
-def handle_uploaded_selenium(f, cred):
-    name, extension = os.path.splitext(f.name)
-    with open(settings.MEDIA_ROOT + '/selenium/%s%s' % (cred.id, extension),
-              'wb+') as destination:
-        for chunk in f.chunks():
-            destination.write(chunk)
-    cred.selenium_script = settings.MEDIA_ROOT + '/selenium/%s%s' % (cred.id,
-                                                                     extension)
-    cred.save()
+    engagement.tmodel_path = threat_file_path
+    engagement.save()
 
 
 # Gets a connection to a Jira server based on the finding
@@ -956,14 +951,7 @@ def add_issue(find, push_to_jira):
                     add_labels(find, new_issue)
                     # Upload dojo finding screenshots to Jira
                     for pic in find.images.all():
-                        jira_attachment(
-                            jira, issue,
-                            settings.MEDIA_ROOT + pic.image_large.name)
-
-                        # if jpkey.enable_engagement_epic_mapping:
-                        #      epic = JIRA_Issue.objects.get(engagement=eng)
-                        #      issue_list = [j_issue.jira_id,]
-                        #      jira.add_issues_to_epic(epic_id=epic.jira_id, issue_keys=[str(j_issue.jira_id)], ignore_epics=True)
+                        jira_attachment(jira, issue, pic.image_large.name)
                 except JIRAError as e:
                     log_jira_alert(e.text, find)
         else:
@@ -986,7 +974,7 @@ def jira_attachment(jira, issue, file, jira_filename=None):
                     issue=issue, attachment=attachment, filename=jira_filename)
             else:
                 # read and upload a file
-                with open(file, 'rb') as f:
+                with default_storage.open(file, 'rb') as f:
                     jira.add_attachment(issue=issue, attachment=f)
         except JIRAError as e:
             log_jira_alert("Attachment: " + e.text)
@@ -1036,8 +1024,7 @@ def update_issue(find, old_status, push_to_jira):
 
             # Upload dojo finding screenshots to Jira
             for pic in find.images.all():
-                jira_attachment(jira, issue,
-                                settings.MEDIA_ROOT + pic.image_large.name)
+                jira_attachment(jira, issue, pic.image_large.name)
 
             issue.update(
                 summary=find.title,
