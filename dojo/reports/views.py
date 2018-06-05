@@ -10,29 +10,34 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
 from django.core.urlresolvers import reverse
-from django.http import Http404, HttpResponseRedirect, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponseRedirect, HttpResponseForbidden, \
+    JsonResponse
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
 
 from dojo.celery import app
 from dojo.endpoint.views import get_endpoint_ids
-from dojo.filters import ReportFindingFilter, ReportAuthedFindingFilter, EndpointReportFilter, ReportFilter, \
+from dojo.filters import ReportFindingFilter, ReportAuthedFindingFilter, \
+    EndpointReportFilter, ReportFilter, \
     EndpointFilter
 from dojo.forms import ReportOptionsForm, DeleteReportForm
 from dojo.models import Product_Type, Finding, Product, Engagement, Test, \
     Dojo_User, Endpoint, Report, Risk_Acceptance
-from dojo.reports.widgets import CoverPage, PageBreak, TableOfContents, WYSIWYGContent, FindingList, EndpointList, \
+from dojo.reports.widgets import CoverPage, PageBreak, TableOfContents, \
+    WYSIWYGContent, FindingList, EndpointList, \
     CustomReportJsonForm, ReportOptions, report_widget_factory
 from dojo.tasks import async_pdf_report, async_custom_pdf_report
-from dojo.utils import get_page_items, add_breadcrumb, get_period_counts, get_system_setting, get_period_counts_legacy
+from dojo.utils import get_page_items, add_breadcrumb, get_system_setting, \
+    get_period_counts_legacy
 
 logger = logging.getLogger(__name__)
 
 
 def report_url_resolver(request):
     try:
-        url_resolver = request.META['HTTP_X_FORWARDED_PROTO'] + "://" +  request.META['HTTP_X_FORWARDED_FOR']
+        url_resolver = request.META['HTTP_X_FORWARDED_PROTO'] + "://" + \
+                       request.META['HTTP_X_FORWARDED_FOR']
     except:
         hostname = request.META['HTTP_HOST']
         port_index = hostname.find(":")
@@ -46,7 +51,8 @@ def report_url_resolver(request):
 def report_builder(request):
     add_breadcrumb(title="Report Builder", top_level=True, request=request)
     findings = Finding.objects.all()
-    findings = ReportAuthedFindingFilter(request.GET, queryset=findings, user=request.user)
+    findings = ReportAuthedFindingFilter(request.GET, queryset=findings,
+                                         user=request.user)
     endpoints = Endpoint.objects.filter(finding__active=True,
                                         finding__verified=True,
                                         finding__false_p=False,
@@ -77,8 +83,9 @@ def custom_report(request):
     form = CustomReportJsonForm(request.POST)
     host = report_url_resolver(request)
     if form.is_valid():
-        selected_widgets = report_widget_factory(json_data=request.POST['json'], request=request, user=request.user,
-                                                 finding_notes=False, finding_images=False, host=host)
+        selected_widgets = report_widget_factory(
+            json_data=request.POST['json'], request=request, user=request.user,
+            finding_notes=False, finding_images=False, host=host)
         report_name = 'Custom PDF Report: ' + request.user.username
         report_format = 'AsciiDoc'
         finding_notes = True
@@ -91,8 +98,10 @@ def custom_report(request):
             finding_notes = (options.include_finding_notes == '1')
             finding_images = (options.include_finding_images == '1')
 
-        selected_widgets = report_widget_factory(json_data=request.POST['json'], request=request, user=request.user,
-                                                 finding_notes=finding_notes, finding_images=finding_images, host=host)
+        selected_widgets = report_widget_factory(
+            json_data=request.POST['json'], request=request, user=request.user,
+            finding_notes=finding_notes, finding_images=finding_images,
+            host=host)
 
         if report_format == 'PDF':
             report = Report(name=report_name,
@@ -107,7 +116,8 @@ def custom_report(request):
                                           filename="custom_pdf_report.pdf",
                                           host=host,
                                           user=request.user,
-                                          uri=request.build_absolute_uri(report.get_url()),
+                                          uri=request.build_absolute_uri(
+                                              report.get_url()),
                                           finding_notes=finding_notes,
                                           finding_images=finding_images)
             messages.add_message(request, messages.SUCCESS,
@@ -133,7 +143,8 @@ def custom_report(request):
 def report_findings(request):
     findings = Finding.objects.filter()
 
-    findings = ReportAuthedFindingFilter(request.GET, queryset=findings, user=request.user)
+    findings = ReportAuthedFindingFilter(request.GET, queryset=findings,
+                                         user=request.user)
 
     title_words = [word
                    for finding in findings.qs
@@ -207,7 +218,8 @@ def download_report(request, rid):
         filename_header = ''
     else:
         # For others like Firefox, we follow RFC2231 (encoding extension in HTTP headers).
-        filename_header = 'filename*=UTF-8\'\'%s' % urllib.quote(original_filename.encode('utf-8'))
+        filename_header = 'filename*=UTF-8\'\'%s' % urllib.quote(
+            original_filename.encode('utf-8'))
     response['Content-Disposition'] = 'attachment; ' + filename_header
     report.status = 'downloaded'
     report.save()
@@ -315,7 +327,8 @@ def regen_report(request, rid):
                                       filename="custom_pdf_report.pdf",
                                       host=report_url_resolver(request),
                                       user=request.user,
-                                      uri=request.build_absolute_uri(report.get_url()))
+                                      uri=request.build_absolute_uri(
+                                          report.get_url()))
         messages.add_message(request, messages.SUCCESS,
                              'Your report is building.',
                              extra_tags='alert-success')
@@ -342,7 +355,9 @@ def product_findings_report(request):
     if request.user.is_staff:
         findings = Finding.objects.filter().distinct()
     else:
-        findings = Finding.objects.filter(test__engagement__product__authorized_users__in=[request.user]).distinct()
+        findings = Finding.objects.filter(
+            test__engagement__product__authorized_users__in=[
+                request.user]).distinct()
 
     return generate_report(request, findings)
 
@@ -395,10 +410,13 @@ def product_endpoint_report(request, pid):
     report_format = request.GET.get('report_type', 'AsciiDoc')
     include_finding_notes = int(request.GET.get('include_finding_notes', 0))
     include_finding_images = int(request.GET.get('include_finding_images', 0))
-    include_executive_summary = int(request.GET.get('include_executive_summary', 0))
-    include_table_of_contents = int(request.GET.get('include_table_of_contents', 0))
+    include_executive_summary = int(
+        request.GET.get('include_executive_summary', 0))
+    include_table_of_contents = int(
+        request.GET.get('include_table_of_contents', 0))
     generate = "_generate" in request.GET
-    add_breadcrumb(parent=product, title="Vulnerable Product Endpoints Report", top_level=False, request=request)
+    add_breadcrumb(parent=product, title="Vulnerable Product Endpoints Report",
+                   top_level=False, request=request)
     report_form = ReportOptionsForm()
 
     filename = "product_endpoint_report.pdf"
@@ -410,19 +428,25 @@ def product_endpoint_report(request, pid):
         user.get_full_name(), (timezone.now().strftime("%m/%d/%Y %I:%M%p %Z")))
 
     try:
-        start_date = Finding.objects.filter(endpoints__in=endpoints.qs).order_by('date')[:1][0].date
+        start_date = \
+            Finding.objects.filter(endpoints__in=endpoints.qs).order_by(
+                'date')[
+            :1][0].date
     except:
         start_date = timezone.now()
 
     end_date = timezone.now()
 
-    risk_acceptances = Risk_Acceptance.objects.filter(engagement__test__finding__endpoints__in=endpoints.qs)
+    risk_acceptances = Risk_Acceptance.objects.filter(
+        engagement__test__finding__endpoints__in=endpoints.qs)
 
     accepted_findings = [finding for ra in risk_acceptances
-                         for finding in ra.accepted_findings.filter(endpoints__in=endpoints.qs)]
+                         for finding in ra.accepted_findings.filter(
+            endpoints__in=endpoints.qs)]
 
     verified_findings = Finding.objects.filter(endpoints__in=endpoints.qs,
-                                               date__range=[start_date, end_date],
+                                               date__range=[start_date,
+                                                            end_date],
                                                false_p=False,
                                                verified=True,
                                                duplicate=False,
@@ -501,11 +525,14 @@ def product_endpoint_report(request, pid):
                                             'include_executive_summary': include_executive_summary,
                                             'include_table_of_contents': include_table_of_contents,
                                             'user': user,
-                                            'team_name': get_system_setting('team_name'),
+                                            'team_name': get_system_setting(
+                                                'team_name'),
                                             'title': 'Generate Report',
-                                            'host': report_url_resolver(request),
+                                            'host': report_url_resolver(
+                                                request),
                                             'user_id': request.user.id},
-                                   uri=request.build_absolute_uri(report.get_url()))
+                                   uri=request.build_absolute_uri(
+                                       report.get_url()))
             messages.add_message(request, messages.SUCCESS,
                                  'Your report is building.',
                                  extra_tags='alert-success')
@@ -561,8 +588,10 @@ def generate_report(request, obj):
     report_format = request.GET.get('report_type', 'AsciiDoc')
     include_finding_notes = int(request.GET.get('include_finding_notes', 0))
     include_finding_images = int(request.GET.get('include_finding_images', 0))
-    include_executive_summary = int(request.GET.get('include_executive_summary', 0))
-    include_table_of_contents = int(request.GET.get('include_table_of_contents', 0))
+    include_executive_summary = int(
+        request.GET.get('include_executive_summary', 0))
+    include_table_of_contents = int(
+        request.GET.get('include_table_of_contents', 0))
     generate = "_generate" in request.GET
     report_name = str(obj)
     report_type = type(obj).__name__
@@ -575,18 +604,23 @@ def generate_report(request, obj):
         report_title = "Product Type Report"
         report_subtitle = str(product_type)
 
-        findings = ReportFindingFilter(request.GET, queryset=Finding.objects.filter(
-            test__engagement__product__prod_type=product_type).distinct().prefetch_related('test',
-                                                                                           'test__engagement__product',
-                                                                                           'test__engagement__product__prod_type'))
+        findings = ReportFindingFilter(request.GET,
+                                       queryset=Finding.objects.filter(
+                                           test__engagement__product__prod_type=product_type).distinct().prefetch_related(
+                                           'test',
+                                           'test__engagement__product',
+                                           'test__engagement__product__prod_type'))
         products = Product.objects.filter(prod_type=product_type,
                                           engagement__test__finding__in=findings.qs).distinct()
-        engagements = Engagement.objects.filter(product__prod_type=product_type,
-                                                test__finding__in=findings.qs).distinct()
-        tests = Test.objects.filter(engagement__product__prod_type=product_type,
-                                    finding__in=findings.qs).distinct()
+        engagements = Engagement.objects.filter(
+            product__prod_type=product_type,
+            test__finding__in=findings.qs).distinct()
+        tests = Test.objects.filter(
+            engagement__product__prod_type=product_type,
+            finding__in=findings.qs).distinct()
         if findings:
-            start_date = timezone.make_aware(datetime.combine(findings.qs.last().date, datetime.min.time()))
+            start_date = timezone.make_aware(
+                datetime.combine(findings.qs.last().date, datetime.min.time()))
         else:
             start_date = timezone.now()
 
@@ -597,9 +631,11 @@ def generate_report(request, obj):
         # include current month
         months_between += 1
 
-        endpoint_monthly_counts = get_period_counts_legacy(findings.qs, findings.qs, None,
-                                                    months_between, start_date,
-                                                    relative_delta='months')
+        endpoint_monthly_counts = get_period_counts_legacy(findings.qs,
+                                                           findings.qs, None,
+                                                           months_between,
+                                                           start_date,
+                                                           relative_delta='months')
 
         context = {'product_type': product_type,
                    'products': products,
@@ -627,12 +663,15 @@ def generate_report(request, obj):
         report_name = "Product Report: " + str(product)
         report_title = "Product Report"
         report_subtitle = str(product)
-        findings = ReportFindingFilter(request.GET, queryset=Finding.objects.filter(
-            test__engagement__product=product).distinct().prefetch_related('test',
-                                                                           'test__engagement__product',
-                                                                           'test__engagement__product__prod_type'))
+        findings = ReportFindingFilter(request.GET,
+                                       queryset=Finding.objects.filter(
+                                           test__engagement__product=product).distinct().prefetch_related(
+                                           'test',
+                                           'test__engagement__product',
+                                           'test__engagement__product__prod_type'))
         ids = set(finding.id for finding in findings.qs)
-        engagements = Engagement.objects.filter(test__finding__id__in=ids).distinct()
+        engagements = Engagement.objects.filter(
+            test__finding__id__in=ids).distinct()
         tests = Test.objects.filter(finding__id__in=ids).distinct()
 
         context = {'product': product,
@@ -653,10 +692,11 @@ def generate_report(request, obj):
     elif type(obj).__name__ == "Engagement":
         engagement = obj
         findings = ReportFindingFilter(request.GET,
-                                       queryset=Finding.objects.filter(test__engagement=engagement,
-                                                                       ).prefetch_related('test',
-                                                                                          'test__engagement__product',
-                                                                                          'test__engagement__product__prod_type').distinct())
+                                       queryset=Finding.objects.filter(
+                                           test__engagement=engagement,
+                                       ).prefetch_related('test',
+                                                          'test__engagement__product',
+                                                          'test__engagement__product__prod_type').distinct())
         report_name = "Engagement Report: " + str(engagement)
         filename = "engagement_finding_report.pdf"
         template = 'dojo/engagement_pdf_report.html'
@@ -683,9 +723,10 @@ def generate_report(request, obj):
     elif type(obj).__name__ == "Test":
         test = obj
         findings = ReportFindingFilter(request.GET,
-                                       queryset=Finding.objects.filter(test=test).prefetch_related('test',
-                                                                                                   'test__engagement__product',
-                                                                                                   'test__engagement__product__prod_type').distinct())
+                                       queryset=Finding.objects.filter(
+                                           test=test).prefetch_related('test',
+                                                                       'test__engagement__product',
+                                                                       'test__engagement__product__prod_type').distinct())
         filename = "test_finding_report.pdf"
         template = "dojo/test_pdf_report.html"
         report_name = "Test Report: " + str(test)
@@ -717,10 +758,11 @@ def generate_report(request, obj):
         report_title = "Endpoint Report"
         report_subtitle = host
         findings = ReportFindingFilter(request.GET,
-                                       queryset=Finding.objects.filter(endpoints__in=endpoints,
-                                                                       ).prefetch_related('test',
-                                                                                          'test__engagement__product',
-                                                                                          'test__engagement__product__prod_type').distinct())
+                                       queryset=Finding.objects.filter(
+                                           endpoints__in=endpoints,
+                                       ).prefetch_related('test',
+                                                          'test__engagement__product',
+                                                          'test__engagement__product__prod_type').distinct())
 
         context = {'endpoint': endpoint,
                    'endpoints': endpoints,
@@ -737,9 +779,10 @@ def generate_report(request, obj):
                    'user_id': request.user.id}
     elif type(obj).__name__ == "QuerySet":
         findings = ReportAuthedFindingFilter(request.GET,
-                                             queryset=obj.prefetch_related('test',
-                                                                           'test__engagement__product',
-                                                                           'test__engagement__product__prod_type').distinct(),
+                                             queryset=obj.prefetch_related(
+                                                 'test',
+                                                 'test__engagement__product',
+                                                 'test__engagement__product__prod_type').distinct(),
                                              user=request.user)
         filename = "finding_report.pdf"
         report_name = 'Finding'
@@ -810,7 +853,8 @@ def generate_report(request, obj):
                                    report_subtitle=report_subtitle,
                                    report_info=report_info,
                                    context=context,
-                                   uri=request.build_absolute_uri(report.get_url()))
+                                   uri=request.build_absolute_uri(
+                                       report.get_url()))
             messages.add_message(request, messages.SUCCESS,
                                  'Your report is building.',
                                  extra_tags='alert-success')

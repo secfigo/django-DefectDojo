@@ -1,8 +1,10 @@
-from xml.dom import NamespaceErr
-from defusedxml import ElementTree
-import os
 import csv
+import os
 import re
+from xml.dom import NamespaceErr
+
+from defusedxml import ElementTree
+
 from dojo.models import Endpoint, Finding
 
 __author__ = 'jay7958'
@@ -20,16 +22,19 @@ def get_text_severity(severity_id):
     else:
         return 'Info'
 
+
 class NessusCSVParser(object):
     def __init__(self, filename, test):
-        content = open(filename.temporary_file_path(), "rb").read().replace("\r", "\n")
+        content = open(filename.temporary_file_path(), "rb").read().replace(
+            "\r", "\n")
         # content = re.sub("\"(.*?)\n(.*?)\"", "\"\1\2\"", content)
         # content = re.sub("(?<=\")\n", "\\\\n", content)
         with open("%s-filtered" % filename.temporary_file_path(), "wb") as out:
             out.write(content)
             out.close()
 
-        with open("%s-filtered" % filename.temporary_file_path(), "rb") as scan_file:
+        with open("%s-filtered" % filename.temporary_file_path(),
+                  "rb") as scan_file:
             reader = csv.reader(scan_file,
                                 lineterminator="\n",
                                 quoting=csv.QUOTE_ALL)
@@ -99,7 +104,8 @@ class NessusCSVParser(object):
                             dat['references'] = var
                     elif heading[i] == "Plugin Output":
                         dat['plugin_output'] = "\nPlugin output(" + \
-                                               dat['endpoint'] + "):" + str(var) + "\n"
+                                               dat['endpoint'] + "):" + str(
+                            var) + "\n"
 
                 if not dat['severity']:
                     dat['severity'] = "Info"
@@ -119,10 +125,13 @@ class NessusCSVParser(object):
                     find = Finding(title=dat['title'],
                                    test=test,
                                    active=False,
-                                   verified=False, description=dat['description'],
+                                   verified=False,
+                                   description=dat['description'],
                                    severity=dat['severity'],
-                                   numerical_severity=Finding.get_numerical_severity(dat['severity']),
-                                   mitigation=dat['mitigation'] if dat['mitigation'] is not None else 'N/A',
+                                   numerical_severity=Finding.get_numerical_severity(
+                                       dat['severity']),
+                                   mitigation=dat['mitigation'] if dat[
+                                                                       'mitigation'] is not None else 'N/A',
                                    impact=dat['impact'],
                                    references=dat['references'],
                                    url=dat['endpoint'])
@@ -143,13 +152,15 @@ class NessusXMLParser(object):
         root = nscan.getroot()
 
         if 'NessusClientData_v2' not in root.tag:
-            raise NamespaceErr('This version of Nessus report is not supported. Please make sure the export is '
-                               'formatted using the NessusClientData_v2 schema.')
+            raise NamespaceErr(
+                'This version of Nessus report is not supported. Please make sure the export is '
+                'formatted using the NessusClientData_v2 schema.')
         dupes = {}
         for report in root.iter("Report"):
             for host in report.iter("ReportHost"):
                 ip = host.attrib['name']
-                fqdn = host.find(".//HostProperties/tag[@name='host-fqdn']").text if host.find(
+                fqdn = host.find(
+                    ".//HostProperties/tag[@name='host-fqdn']").text if host.find(
                     ".//HostProperties/tag[@name='host-fqdn']") is not None else None
 
                 for item in host.iter("ReportItem"):
@@ -170,7 +181,9 @@ class NessusXMLParser(object):
                         description = item.find("synopsis").text + "\n\n"
                     if item.find("plugin_output") is not None:
                         plugin_output = "Plugin Output: " + ip + (
-                            (":" + port) if port is not None else "") + " " + item.find("plugin_output").text + "\n\n"
+                            (
+                                        ":" + port) if port is not None else "") + " " + item.find(
+                            "plugin_output").text + "\n\n"
                         description += plugin_output
 
                     nessus_severity_id = int(item.attrib["severity"])
@@ -178,13 +191,17 @@ class NessusXMLParser(object):
 
                     impact = item.find("description").text + "\n\n"
                     if item.find("cvss_vector") is not None:
-                        impact += "CVSS Vector: " + item.find("cvss_vector").text + "\n"
+                        impact += "CVSS Vector: " + item.find(
+                            "cvss_vector").text + "\n"
                     if item.find("cvss_base_score") is not None:
-                        impact += "CVSS Base Score: " + item.find("cvss_base_score").text + "\n"
+                        impact += "CVSS Base Score: " + item.find(
+                            "cvss_base_score").text + "\n"
                     if item.find("cvss_temporal_score") is not None:
-                        impact += "CVSS Temporal Score: " + item.find("cvss_temporal_score").text + "\n"
+                        impact += "CVSS Temporal Score: " + item.find(
+                            "cvss_temporal_score").text + "\n"
 
-                    mitigation = item.find("solution").text if item.find("solution") is not None else "N/A"
+                    mitigation = item.find("solution").text if item.find(
+                        "solution") is not None else "N/A"
                     references = ""
                     for ref in item.iter("see_also"):
                         refs = ref.text.split()
@@ -211,7 +228,8 @@ class NessusXMLParser(object):
                                        verified=False,
                                        description=description,
                                        severity=severity,
-                                       numerical_severity=Finding.get_numerical_severity(severity),
+                                       numerical_severity=Finding.get_numerical_severity(
+                                           severity),
                                        mitigation=mitigation,
                                        impact=impact,
                                        references=references,
@@ -219,8 +237,9 @@ class NessusXMLParser(object):
                         find.unsaved_endpoints = list()
                         dupes[dupe_key] = find
 
-                    find.unsaved_endpoints.append(Endpoint(host=ip + (":" + port if port is not None else ""),
-                                                           protocol=protocol))
+                    find.unsaved_endpoints.append(Endpoint(
+                        host=ip + (":" + port if port is not None else ""),
+                        protocol=protocol))
                     if fqdn is not None:
                         find.unsaved_endpoints.append(Endpoint(host=fqdn,
                                                                protocol=protocol))
