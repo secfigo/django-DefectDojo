@@ -1161,7 +1161,7 @@ def remove_finding_image_from_storage(finding_image):
                   finding_image.image_small,
                   finding_image.image_medium,
                   finding_image.image_large]:
-        if image and default_storage.exists(image.name):
+        if default_storage.exists(image.name):
             try:
                 default_storage.delete(image.name)
             except NotImplementedError:
@@ -1210,7 +1210,7 @@ def manage_images(request, fid):
                         # TODO: Clarify whether we actually write to this cache at some point; if not, this code is not used
                         # CACHE is used by ImageSpecFields to generate thumbnails and images of different sizes. Clarify, whether there's not a more elegant method
                         cache_to_remove = os.path.join('CACHE', 'images',
-                                                       'finding_images',
+                                                       FindingImage.UPLOAD_DIRECTORY,
                                                        os.path.splitext(file)[
                                                            0])
                         # TODO: See above TODO about the cache mechanism for finding images
