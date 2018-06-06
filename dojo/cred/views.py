@@ -1,17 +1,20 @@
 import logging
 import os
+
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
-from dojo.models import Finding, Product, Engagement, Cred_User, Cred_Mapping, Test
+
+from dojo.forms import CredUserForm, NoteForm, CredMappingFormProd, \
+    CredMappingForm
+from dojo.models import Finding, Product, Engagement, Cred_User, Cred_Mapping, \
+    Test
 from dojo.utils import add_breadcrumb
-from dojo.forms import CredUserForm, NoteForm, CredMappingFormProd, CredMappingForm
-
 from dojo.utils import dojo_crypto_encrypt, prepare_for_view, FileIterWrapper
-
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,6 @@ def edit_cred(request, ttid):
             form_copy = tform.save(commit=False)
             form_copy.password = dojo_crypto_encrypt(
                 tform.cleaned_data['password'])
-            # handle_uploaded_selenium(request.FILES['selenium_script'], tool_config)
             form_copy.save()
 
             messages.add_message(
@@ -346,7 +348,8 @@ def edit_cred_product(request, pid, ttid):
                 messages.SUCCESS,
                 'Credential Successfully Updated.',
                 extra_tags='alert-success')
-            return HttpResponseRedirect(reverse('view_product_details', args=(pid, )))
+            return HttpResponseRedirect(
+                reverse('view_product_details', args=(pid,)))
     else:
         tform = CredMappingFormProd(instance=cred)
 
@@ -377,7 +380,7 @@ def edit_cred_product_engagement(request, eid, ttid):
                 'Credential Successfully Updated.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_engagement', args=(eid, )))
+                reverse('view_engagement', args=(eid,)))
     else:
         tform = CredMappingFormProd(instance=cred)
         tform.fields["cred_id"].queryset = Cred_Mapping.objects.filter(
@@ -396,7 +399,6 @@ def edit_cred_product_engagement(request, eid, ttid):
 
 @user_passes_test(lambda u: u.is_staff)
 def new_cred_product(request, pid):
-
     if request.method == 'POST':
         tform = CredMappingFormProd(request.POST)
         if tform.is_valid():
@@ -416,7 +418,8 @@ def new_cred_product(request, pid):
 
             messages.add_message(
                 request, messages.SUCCESS, message, extra_tags=status_tag)
-            return HttpResponseRedirect(reverse('view_product_details', args=(pid, )))
+            return HttpResponseRedirect(
+                reverse('view_product_details', args=(pid,)))
     else:
         tform = CredMappingFormProd()
 
@@ -463,7 +466,7 @@ def new_cred_product_engagement(request, eid):
             messages.add_message(
                 request, messages.SUCCESS, message, extra_tags=status_tag)
             return HttpResponseRedirect(
-                reverse('view_engagement', args=(eid, )))
+                reverse('view_engagement', args=(eid,)))
     else:
         tform = CredMappingForm()
         tform.fields["cred_user"].queryset = Cred_Mapping.objects.filter(
@@ -476,7 +479,7 @@ def new_cred_product_engagement(request, eid):
         request, 'dojo/new_cred_mapping.html', {
             'tform': tform,
             'eid': eid,
-            'formlink': reverse('new_cred_product_engagement', args=(eid, ))
+            'formlink': reverse('new_cred_product_engagement', args=(eid,))
         })
 
 
@@ -513,7 +516,7 @@ def new_cred_engagement_test(request, tid):
 
             messages.add_message(
                 request, messages.SUCCESS, message, extra_tags=status_tag)
-            return HttpResponseRedirect(reverse('view_test', args=(tid, )))
+            return HttpResponseRedirect(reverse('view_test', args=(tid,)))
     else:
         tform = CredMappingForm()
         tform.fields["cred_user"].queryset = Cred_Mapping.objects.filter(
@@ -526,7 +529,7 @@ def new_cred_engagement_test(request, tid):
         request, 'dojo/new_cred_mapping.html', {
             'tform': tform,
             'eid': tid,
-            'formlink': reverse('new_cred_engagement_test', args=(tid, ))
+            'formlink': reverse('new_cred_engagement_test', args=(tid,))
         })
 
 
@@ -570,7 +573,7 @@ def new_cred_finding(request, fid):
 
             messages.add_message(
                 request, messages.SUCCESS, message, extra_tags=status_tag)
-            return HttpResponseRedirect(reverse('view_finding', args=(fid, )))
+            return HttpResponseRedirect(reverse('view_finding', args=(fid,)))
     else:
         tform = CredMappingForm()
         tform.fields["cred_user"].queryset = Cred_Mapping.objects.filter(
@@ -583,7 +586,7 @@ def new_cred_finding(request, fid):
         request, 'dojo/new_cred_mapping.html', {
             'tform': tform,
             'eid': fid,
-            'formlink': reverse('new_cred_finding', args=(fid, ))
+            'formlink': reverse('new_cred_finding', args=(fid,))
         })
 
 
@@ -650,7 +653,7 @@ def delete_cred_controller(request, destination_url, id, ttid):
         if destination_url == "cred":
             return HttpResponseRedirect(reverse(destination_url))
         else:
-            return HttpResponseRedirect(reverse(destination_url, args=(id, )))
+            return HttpResponseRedirect(reverse(destination_url, args=(id,)))
     else:
         tform = CredMappingForm(instance=cred)
 
@@ -695,10 +698,11 @@ def view_selenium(request, ttid):
     print cred.cred_id.selenium_script
     # mimetype, encoding = mimetypes.guess_type(cred.cred_id.selenium_script)
     response = StreamingHttpResponse(
-        FileIterWrapper(open(cred.cred_id.selenium_script)))
+        FileIterWrapper(default_storage.open(cred.cred_id.selenium_script)))
     fileName, fileExtension = os.path.splitext(cred.cred_id.selenium_script)
-    response[
-        'Content-Disposition'] = 'attachment; filename=selenium_script' + fileExtension
+    response['Content-Disposition'] = \
+        'attachment; filename=selenium_script' + fileExtension
+    # TODO: Clarify what mimetypes contains here - from the docs, this seems not to work
     response['Content-Type'] = mimetypes
 
     return response

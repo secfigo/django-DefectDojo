@@ -1,19 +1,21 @@
-import calendar as tcalendar
-import re
+import StringIO
 import binascii
-import os
+import calendar as tcalendar
 import hashlib
 import json
-import StringIO
-from Crypto.Cipher import AES
+import os
+import re
 from calendar import monthrange
 from datetime import date, datetime
 from math import pi, sqrt
 
-import vobject
 import requests
+import vobject
+from Crypto.Cipher import AES
+from asteval import Interpreter
 from dateutil.relativedelta import relativedelta, MO
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.core.mail import send_mail
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.urlresolvers import get_resolver, reverse
@@ -23,11 +25,13 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from jira import JIRA
 from jira.exceptions import JIRAError
+from requests.auth import HTTPBasicAuth
+
 from dojo.models import Finding, Engagement, Finding_Template, \
     Product, JIRA_PKey, JIRA_Issue, Dojo_User, User, \
-    Alerts, System_Settings, Notifications, UserContactInfo, Endpoint, Benchmark_Type
-from asteval import Interpreter
-from requests.auth import HTTPBasicAuth
+    Alerts, System_Settings, Notifications, UserContactInfo, Endpoint, \
+    Benchmark_Type
+
 """
 Michael & Fatima:
 Helper function for metrics
@@ -42,7 +46,7 @@ def sync_false_history(new_finding, *args, **kwargs):
         cwe=new_finding.cwe,
         test__test_type=new_finding.test.test_type,
         false_p=True).exclude(id=new_finding.id).exclude(cwe=None).exclude(
-            endpoints=None)
+        endpoints=None)
     eng_findings_title = Finding.objects.filter(
         test__engagement__product=new_finding.test.engagement.product,
         title=new_finding.title,
@@ -61,14 +65,14 @@ def sync_dedupe(new_finding, *args, **kwargs):
         static_finding=new_finding.static_finding,
         dynamic_finding=new_finding.dynamic_finding,
         date__lte=new_finding.date).exclude(id=new_finding.id).exclude(
-            cwe=None).exclude(duplicate=True)
+        cwe=None).exclude(duplicate=True)
     eng_findings_title = Finding.objects.filter(
         test__engagement__product=new_finding.test.engagement.product,
         title=new_finding.title,
         static_finding=new_finding.static_finding,
         dynamic_finding=new_finding.dynamic_finding,
         date__lte=new_finding.date).exclude(id=new_finding.id).exclude(
-            duplicate=True)
+        duplicate=True)
     total_findings = eng_findings_cwe | eng_findings_title
     # total_findings = total_findings.order_by('date')
     for find in total_findings:
@@ -272,17 +276,17 @@ def add_breadcrumb(parent=None,
             if title is not None:
                 obj_crumbs += [{
                     'title':
-                    title,
+                        title,
                     'url':
-                    request.get_full_path() if url is None else url
+                        request.get_full_path() if url is None else url
                 }]
         else:
             title_done = True
             obj_crumbs = [{
                 'title':
-                title,
+                    title,
                 'url':
-                request.get_full_path() if url is None else url
+                    request.get_full_path() if url is None else url
             }]
 
         for crumb in crumbs:
@@ -292,7 +296,10 @@ def add_breadcrumb(parent=None,
             for obj_crumb in obj_crumbs:
                 obj_crumb_to_resolve = obj_crumb[
                     'url'] if '?' not in obj_crumb['url'] else obj_crumb[
-                        'url'][:obj_crumb['url'].index('?')]
+                                                                   'url'][
+                                                               :obj_crumb[
+                                                                   'url'].index(
+                                                                   '?')]
                 obj_crumb_view = resolver(obj_crumb_to_resolve)
 
                 if crumb_view.view_name == obj_crumb_view.view_name:
@@ -333,7 +340,8 @@ def get_punchcard_data(findings, weeks_between, start_date):
                     # [0,0,(20*.02)]
                     # [week, day, weight]
                     days[day_offset[finding.date.weekday()]] += 1
-                    if days[day_offset[finding.date.weekday()]] > highest_count:
+                    if days[
+                        day_offset[finding.date.weekday()]] > highest_count:
                         highest_count = days[day_offset[
                             finding.date.weekday()]]
             except:
@@ -341,7 +349,8 @@ def get_punchcard_data(findings, weeks_between, start_date):
                     # [0,0,(20*.02)]
                     # [week, day, weight]
                     days[day_offset[finding.date.weekday()]] += 1
-                    if days[day_offset[finding.date.weekday()]] > highest_count:
+                    if days[
+                        day_offset[finding.date.weekday()]] > highest_count:
                         highest_count = days[day_offset[
                             finding.date.weekday()]]
                 pass
@@ -386,7 +395,8 @@ def get_period_counts_legacy(findings,
             end_date = (start_date + relativedelta(months=x)) + relativedelta(
                 day=1, months=+1, days=-1)
             new_date = (
-                start_date + relativedelta(months=x)) + relativedelta(day=1)
+                               start_date + relativedelta(
+                           months=x)) + relativedelta(day=1)
         else:
             # week starts the monday before
             new_date = start_date + relativedelta(weeks=x, weekday=MO(1))
@@ -485,7 +495,8 @@ def get_period_counts(active_findings,
             end_date = (start_date + relativedelta(months=x)) + relativedelta(
                 day=1, months=+1, days=-1)
             new_date = (
-                start_date + relativedelta(months=x)) + relativedelta(day=1)
+                               start_date + relativedelta(
+                           months=x)) + relativedelta(day=1)
         else:
             # week starts the monday before
             new_date = start_date + relativedelta(weeks=x, weekday=MO(1))
@@ -622,7 +633,7 @@ def opened_in_period(start_date, end_date, pt):
         severity__in=(
             'Critical', 'High', 'Medium',
             'Low')).values('numerical_severity').annotate(
-                Count('numerical_severity')).order_by('numerical_severity')
+        Count('numerical_severity')).order_by('numerical_severity')
     total_opened_in_period = Finding.objects.filter(
         date__range=[start_date, end_date],
         test__engagement__product__prod_type=pt,
@@ -632,33 +643,33 @@ def opened_in_period(start_date, end_date, pt):
         out_of_scope=False,
         mitigated__isnull=True,
         severity__in=('Critical', 'High', 'Medium', 'Low')).aggregate(
-            total=Sum(
-                Case(
-                    When(
-                        severity__in=('Critical', 'High', 'Medium', 'Low'),
-                        then=Value(1)),
-                    output_field=IntegerField())))['total']
+        total=Sum(
+            Case(
+                When(
+                    severity__in=('Critical', 'High', 'Medium', 'Low'),
+                    then=Value(1)),
+                output_field=IntegerField())))['total']
 
     oip = {
         'S0':
-        0,
+            0,
         'S1':
-        0,
+            0,
         'S2':
-        0,
+            0,
         'S3':
-        0,
+            0,
         'Total':
-        total_opened_in_period,
+            total_opened_in_period,
         'start_date':
-        start_date,
+            start_date,
         'end_date':
-        end_date,
+            end_date,
         'closed':
-        Finding.objects.filter(
-            mitigated__range=[start_date, end_date],
-            test__engagement__product__prod_type=pt,
-            severity__in=('Critical', 'High', 'Medium', 'Low')).aggregate(
+            Finding.objects.filter(
+                mitigated__range=[start_date, end_date],
+                test__engagement__product__prod_type=pt,
+                severity__in=('Critical', 'High', 'Medium', 'Low')).aggregate(
                 total=Sum(
                     Case(
                         When(
@@ -666,15 +677,15 @@ def opened_in_period(start_date, end_date, pt):
                             then=Value(1)),
                         output_field=IntegerField())))['total'],
         'to_date_total':
-        Finding.objects.filter(
-            date__lte=end_date.date(),
-            verified=True,
-            false_p=False,
-            duplicate=False,
-            out_of_scope=False,
-            mitigated__isnull=True,
-            test__engagement__product__prod_type=pt,
-            severity__in=('Critical', 'High', 'Medium', 'Low')).count()
+            Finding.objects.filter(
+                date__lte=end_date.date(),
+                verified=True,
+                false_p=False,
+                duplicate=False,
+                out_of_scope=False,
+                mitigated__isnull=True,
+                test__engagement__product__prod_type=pt,
+                severity__in=('Critical', 'High', 'Medium', 'Low')).count()
     }
 
     for o in opened_in_period:
@@ -689,7 +700,7 @@ def message(count, noun, verb):
 
 
 class FileIterWrapper(object):
-    def __init__(self, flo, chunk_size=1024**2):
+    def __init__(self, flo, chunk_size=1024 ** 2):
         self.flo = flo
         self.chunk_size = chunk_size
 
@@ -789,26 +800,20 @@ def get_page_items(request, items, page_size, param_name='page'):
     return page
 
 
-def handle_uploaded_threat(f, eng):
-    name, extension = os.path.splitext(f.name)
-    with open(settings.MEDIA_ROOT + '/threat/%s%s' % (eng.id, extension),
-              'wb+') as destination:
-        for chunk in f.chunks():
+def handle_uploaded_threat(file, engagement):
+    """
+    Handler function for uploading threat model files in the engagement view
+    :param file: file contents
+    :param Engagement engagement: an engagement object
+    """
+    name, extension = os.path.splitext(file.name)
+    threat_file_name = '%s%s' % (engagement.id, extension)
+    threat_file_path = os.path.join('threat', threat_file_name)
+    with default_storage.open(threat_file_path, 'wb+') as destination:
+        for chunk in file.chunks():
             destination.write(chunk)
-    eng.tmodel_path = settings.MEDIA_ROOT + '/threat/%s%s' % (eng.id,
-                                                              extension)
-    eng.save()
-
-
-def handle_uploaded_selenium(f, cred):
-    name, extension = os.path.splitext(f.name)
-    with open(settings.MEDIA_ROOT + '/selenium/%s%s' % (cred.id, extension),
-              'wb+') as destination:
-        for chunk in f.chunks():
-            destination.write(chunk)
-    cred.selenium_script = settings.MEDIA_ROOT + '/selenium/%s%s' % (cred.id,
-                                                                     extension)
-    cred.save()
+    engagement.tmodel_path = threat_file_path
+    engagement.save()
 
 
 # Gets a connection to a Jira server based on the finding
@@ -868,7 +873,7 @@ def log_jira_message(text, finding):
         event='jira_update',
         title='Jira update message',
         description=text + " Finding: " + str(finding.id),
-        url=reverse('view_finding', args=(finding.id, )),
+        url=reverse('view_finding', args=(finding.id,)),
         icon='bullseye',
         source='Jira')
 
@@ -946,14 +951,7 @@ def add_issue(find, push_to_jira):
                     add_labels(find, new_issue)
                     # Upload dojo finding screenshots to Jira
                     for pic in find.images.all():
-                        jira_attachment(
-                            jira, issue,
-                            settings.MEDIA_ROOT + pic.image_large.name)
-
-                        # if jpkey.enable_engagement_epic_mapping:
-                        #      epic = JIRA_Issue.objects.get(engagement=eng)
-                        #      issue_list = [j_issue.jira_id,]
-                        #      jira.add_issues_to_epic(epic_id=epic.jira_id, issue_keys=[str(j_issue.jira_id)], ignore_epics=True)
+                        jira_attachment(jira, issue, pic.image_large.name)
                 except JIRAError as e:
                     log_jira_alert(e.text, find)
         else:
@@ -962,7 +960,6 @@ def add_issue(find, push_to_jira):
 
 
 def jira_attachment(jira, issue, file, jira_filename=None):
-
     basename = file
     if jira_filename is None:
         basename = os.path.basename(file)
@@ -977,7 +974,7 @@ def jira_attachment(jira, issue, file, jira_filename=None):
                     issue=issue, attachment=attachment, filename=jira_filename)
             else:
                 # read and upload a file
-                with open(file, 'rb') as f:
+                with default_storage.open(file, 'rb') as f:
                     jira.add_attachment(issue=issue, attachment=f)
         except JIRAError as e:
             log_jira_alert("Attachment: " + e.text)
@@ -1027,8 +1024,7 @@ def update_issue(find, old_status, push_to_jira):
 
             # Upload dojo finding screenshots to Jira
             for pic in find.images.all():
-                jira_attachment(jira, issue,
-                                settings.MEDIA_ROOT + pic.image_large.name)
+                jira_attachment(jira, issue, pic.image_large.name)
 
             issue.update(
                 summary=find.title,
@@ -1163,7 +1159,7 @@ def send_review_email(request, user, finding, users, new_note):
     msg += "the following finding for accuracy:"
     msg += "\n\n" + finding.title
     msg += "\n\nIt can be reviewed at " + request.build_absolute_uri(
-        reverse("view_finding", args=(finding.id, )))
+        reverse("view_finding", args=(finding.id,)))
     msg += "\n\n{0} provided the following details:".format(str(user))
     msg += "\n\n" + new_note.entry
     msg += "\n\nThanks\n"
@@ -1278,7 +1274,6 @@ def get_db_key():
 
 
 def prepare_for_view(encrypted_value):
-
     key = None
     decrypted_value = ""
     if encrypted_value is not NotImplementedError:
@@ -1363,8 +1358,8 @@ def create_notification(event=None, **kwargs):
             res = requests.request(
                 method='POST',
                 url='https://%s/v2/room/%s/notification?auth_token=%s' %
-                (get_system_setting('hipchat_site'), channel,
-                 get_system_setting('hipchat_token')),
+                    (get_system_setting('hipchat_site'), channel,
+                     get_system_setting('hipchat_token')),
                 data={
                     'message': create_notification_message(event, 'slack'),
                     'message_format': 'text'
@@ -1476,7 +1471,7 @@ def calculate_grade(product):
             verified=True,
             false_p=False,
             test__engagement__product=product).values('severity').annotate(
-                Count('numerical_severity')).order_by()
+            Count('numerical_severity')).order_by()
 
         low = 0
         medium = 0
@@ -1533,5 +1528,6 @@ def tab_view_count(product_id):
                                            mitigated__isnull=True)
     endpoints = Endpoint.objects.filter(product=product)
     # benchmarks = Benchmark_Product_Summary.objects.filter(product=product, publish=True, benchmark_type__enabled=True).order_by('benchmark_type__name')
-    benchmark_type = Benchmark_Type.objects.filter(enabled=True).order_by('name')
+    benchmark_type = Benchmark_Type.objects.filter(enabled=True).order_by(
+        'name')
     return product, engagements, open_findings, endpoints.count(), benchmark_type

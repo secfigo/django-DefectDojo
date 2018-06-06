@@ -1,34 +1,38 @@
 # #  engagements
 import logging
+import operator
 import os
 from datetime import datetime, timedelta
-import operator
 
-from django.contrib.auth.models import User
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.db.models import Q
-from django.http import HttpResponseRedirect, StreamingHttpResponse, Http404, HttpResponse
+from django.http import HttpResponseRedirect, StreamingHttpResponse, Http404, \
+    HttpResponse
 from django.shortcuts import render, get_object_or_404
-from django.views.decorators.cache import cache_page
 from django.utils import timezone
+from django.views.decorators.cache import cache_page
 
 from dojo.filters import EngagementFilter
 from dojo.forms import CheckForm, \
     UploadThreatForm, UploadRiskForm, NoteForm, DoneForm, \
-    EngForm, TestForm, ReplaceRiskAcceptanceForm, AddFindingsRiskAcceptanceForm, DeleteEngagementForm, ImportScanForm, \
+    EngForm, TestForm, ReplaceRiskAcceptanceForm, \
+    AddFindingsRiskAcceptanceForm, DeleteEngagementForm, ImportScanForm, \
     JIRAFindingForm, CredMappingForm
 from dojo.models import Finding, Product, Engagement, Test, \
     Check_List, Test_Type, Notes, \
     Risk_Acceptance, Development_Environment, BurpRawRequestResponse, Endpoint, \
     JIRA_PKey, JIRA_Issue, Cred_Mapping, Dojo_User, System_Settings
+from dojo.tasks import update_epic_task, add_epic_task, close_epic_task
 from dojo.tools.factory import import_parser_factory
 from dojo.utils import get_page_items, add_breadcrumb, handle_uploaded_threat, \
-    FileIterWrapper, get_cal_event, message, get_system_setting, create_notification, tab_view_count
-from dojo.tasks import update_epic_task, add_epic_task, close_epic_task
+    FileIterWrapper, get_cal_event, message, get_system_setting, \
+    create_notification, tab_view_count
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +120,10 @@ def new_engagement(request):
                 extra_tags='alert-success')
             if "_Add Tests" in request.POST:
                 return HttpResponseRedirect(
-                    reverse('add_tests', args=(new_eng.id, )))
+                    reverse('add_tests', args=(new_eng.id,)))
             else:
                 return HttpResponseRedirect(
-                    reverse('view_engagement', args=(new_eng.id, )))
+                    reverse('view_engagement', args=(new_eng.id,)))
     else:
         form = EngForm(initial={'date': timezone.now().date()})
 
@@ -139,7 +143,8 @@ def edit_engagement(request, eid):
             jform = JIRAFindingForm(
                 request.POST, prefix='jiraform', enabled=True)
 
-        if (form.is_valid() and jform is None) or (form.is_valid() and jform and jform.is_valid()):
+        if (form.is_valid() and jform is None) or (
+                form.is_valid() and jform and jform.is_valid()):
             if 'jiraform-push_to_jira' in request.POST:
                 try:
                     # jissue = JIRA_Issue.objects.get(engagement=eng)
@@ -162,10 +167,10 @@ def edit_engagement(request, eid):
                 extra_tags='alert-success')
             if '_Add Tests' in request.POST:
                 return HttpResponseRedirect(
-                    reverse('add_tests', args=(eng.id, )))
+                    reverse('add_tests', args=(eng.id,)))
             else:
                 return HttpResponseRedirect(
-                    reverse('view_engagement', args=(eng.id, )))
+                    reverse('view_engagement', args=(eng.id,)))
     else:
         form = EngForm(instance=eng)
         try:
@@ -184,7 +189,8 @@ def edit_engagement(request, eid):
     form.initial['tags'] = [tag.name for tag in eng.tags]
     add_breadcrumb(
         parent=eng, title="Edit Engagement", top_level=False, request=request)
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(eng.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        eng.product.id)
     system_settings = System_Settings.objects.get()
 
     return render(request, 'dojo/new_eng.html', {
@@ -225,11 +231,13 @@ def delete_engagement(request, eid):
                     messages.SUCCESS,
                     'Engagement and relationships removed.',
                     extra_tags='alert-success')
-                return HttpResponseRedirect(reverse("view_engagements", args=(product.id, )))
+                return HttpResponseRedirect(
+                    reverse("view_engagements", args=(product.id,)))
 
     add_breadcrumb(
         parent=engagement, title="Delete", top_level=False, request=request)
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        product.id)
     system_settings = System_Settings.objects.get()
 
     return render(request, 'dojo/delete_engagement.html', {
@@ -355,7 +363,8 @@ def view_engagement(request, eid):
         out_of_scope=False,
         mitigated__isnull=False)
 
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(prod.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        prod.id)
     return render(
         request, 'dojo/view_eng.html', {
             'eng': eng,
@@ -437,17 +446,17 @@ def add_tests(request, eid):
                 test=new_test,
                 engagement=eng,
                 url=request.build_absolute_uri(
-                    reverse('view_engagement', args=(eng.id, ))))
+                    reverse('view_engagement', args=(eng.id,))))
 
             if '_Add Another Test' in request.POST:
                 return HttpResponseRedirect(
-                    reverse('add_tests', args=(eng.id, )))
+                    reverse('add_tests', args=(eng.id,)))
             elif '_Add Findings' in request.POST:
                 return HttpResponseRedirect(
-                    reverse('add_findings', args=(new_test.id, )))
+                    reverse('add_findings', args=(new_test.id,)))
             elif '_Finished' in request.POST:
                 return HttpResponseRedirect(
-                    reverse('view_engagement', args=(eng.id, )))
+                    reverse('view_engagement', args=(eng.id,)))
     else:
         form = TestForm()
         form.initial['target_start'] = eng.target_start
@@ -455,7 +464,8 @@ def add_tests(request, eid):
         form.initial['lead'] = request.user
     add_breadcrumb(
         parent=eng, title="Add Tests", top_level=False, request=request)
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(eng.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        eng.product.id)
     system_settings = System_Settings.objects.get()
     return render(request, 'dojo/add_tests.html', {
         'active_tab': 'engagements',
@@ -601,15 +611,16 @@ def import_scan_results(request, eid):
 
                 create_notification(
                     event='results_added',
-                    title=str(finding_count) + " findings for " + engagement.product.name,
+                    title=str(
+                        finding_count) + " findings for " + engagement.product.name,
                     finding_count=finding_count,
                     test=t,
                     engagement=engagement,
                     url=request.build_absolute_uri(
-                        reverse('view_test', args=(t.id, ))))
+                        reverse('view_test', args=(t.id,))))
 
                 return HttpResponseRedirect(
-                    reverse('view_test', args=(t.id, )))
+                    reverse('view_test', args=(t.id,)))
             except SyntaxError:
                 messages.add_message(
                     request,
@@ -622,7 +633,8 @@ def import_scan_results(request, eid):
         title="Import Scan Results",
         top_level=False,
         request=request)
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        engagement.product.id)
     system_settings = System_Settings.objects.get()
     return render(request, 'dojo/import_scan_results.html', {
         'form': form,
@@ -654,7 +666,8 @@ def close_eng(request, eid):
         messages.SUCCESS,
         'Engagement closed successfully.',
         extra_tags='alert-success')
-    return HttpResponseRedirect(reverse("view_engagements", args=(eng.product.id, )))
+    return HttpResponseRedirect(
+        reverse("view_engagements", args=(eng.product.id,)))
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -668,7 +681,7 @@ def reopen_eng(request, eid):
         messages.SUCCESS,
         'Engagement reopened successfully.',
         extra_tags='alert-success')
-    return HttpResponseRedirect(reverse('view_engagement', args=(eid, )))
+    return HttpResponseRedirect(reverse('view_engagement', args=(eid,)))
 
 
 """
@@ -709,7 +722,7 @@ def complete_checklist(request, eid):
                 'Checklist saved.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_engagement', args=(eid, )))
+                reverse('view_engagement', args=(eid,)))
     else:
         tests = Test.objects.filter(engagement=eng)
         findings = Finding.objects.filter(test__in=tests).all()
@@ -769,7 +782,7 @@ def upload_risk(request, eid):
                 'Risk acceptance saved.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_engagement', args=(eid, )))
+                reverse('view_engagement', args=(eid,)))
     else:
         form = UploadRiskForm(initial={'reporter': request.user})
 
@@ -785,7 +798,8 @@ def upload_risk(request, eid):
 def view_risk(request, eid, raid):
     risk_approval = get_object_or_404(Risk_Acceptance, pk=raid)
     eng = get_object_or_404(Engagement, pk=eid)
-    if (request.user.is_staff or request.user in eng.product.authorized_users.all()):
+    if (
+            request.user.is_staff or request.user in eng.product.authorized_users.all()):
         pass
     else:
         raise PermissionDenied
@@ -881,7 +895,8 @@ def view_risk(request, eid, raid):
         request,
         risk_approval.accepted_findings.order_by('numerical_severity'), 15)
 
-    authorized = (request.user == risk_approval.reporter.username or request.user.is_staff)
+    authorized = (
+            request.user == risk_approval.reporter.username or request.user.is_staff)
 
     add_breadcrumb(parent=risk_approval, top_level=False, request=request)
 
@@ -925,7 +940,7 @@ def delete_risk(request, eid, raid):
         messages.SUCCESS,
         'Risk acceptance deleted successfully.',
         extra_tags='alert-success')
-    return HttpResponseRedirect(reverse("view_engagement", args=(eng.id, )))
+    return HttpResponseRedirect(reverse("view_engagement", args=(eng.id,)))
 
 
 def download_risk(request, eid, raid):
@@ -935,14 +950,15 @@ def download_risk(request, eid, raid):
 
     risk_approval = get_object_or_404(Risk_Acceptance, pk=raid)
     en = get_object_or_404(Engagement, pk=eid)
-    if (request.user.is_staff or request.user in en.product.authorized_users.all()):
+    if (request.user.is_staff
+            or request.user in en.product.authorized_users.all()):
         pass
     else:
         raise PermissionDenied
 
+    # TODO: MEDIA_ROOT is supposed to be an absolute path. Does that interfere with other storage backends than LocalFileStorage?
     response = StreamingHttpResponse(
-        FileIterWrapper(
-            open(settings.MEDIA_ROOT + "/" + risk_approval.path.name)))
+        FileIterWrapper(default_storage.open(risk_approval.path.name)))
     response['Content-Disposition'] = 'attachment; filename="%s"' \
                                       % risk_approval.filename()
     mimetype, encoding = mimetypes.guess_type(risk_approval.path.name)
@@ -960,9 +976,9 @@ under media folder
 
 @user_passes_test(lambda u: u.is_staff)
 def upload_threatmodel(request, eid):
-    eng = Engagement.objects.get(id=eid)
+    engagement = Engagement.objects.get(id=eid)
     add_breadcrumb(
-        parent=eng,
+        parent=engagement,
         title="Upload a threat model",
         top_level=False,
         request=request)
@@ -970,22 +986,22 @@ def upload_threatmodel(request, eid):
     if request.method == 'POST':
         form = UploadThreatForm(request.POST, request.FILES)
         if form.is_valid():
-            handle_uploaded_threat(request.FILES['file'], eng)
-            eng.progress = 'other'
-            eng.threat_model = True
-            eng.save()
+            handle_uploaded_threat(request.FILES['file'], engagement)
+            engagement.progress = 'other'
+            engagement.threat_model = True
+            engagement.save()
             messages.add_message(
                 request,
                 messages.SUCCESS,
                 'Threat model saved.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_engagement', args=(eid, )))
+                reverse('view_engagement', args=(eid,)))
     else:
         form = UploadThreatForm()
     return render(request, 'dojo/up_threat.html', {
         'form': form,
-        'eng': eng,
+        'eng': engagement,
     })
 
 
@@ -996,7 +1012,8 @@ def view_threatmodel(request, eid):
     mimetypes.init()
     eng = get_object_or_404(Engagement, pk=eid)
     mimetype, encoding = mimetypes.guess_type(eng.tmodel_path)
-    response = StreamingHttpResponse(FileIterWrapper(open(eng.tmodel_path)))
+    response = StreamingHttpResponse(
+        FileIterWrapper(default_storage.open(eng.tmodel_path)))
     fileName, fileExtension = os.path.splitext(eng.tmodel_path)
     response[
         'Content-Disposition'] = 'attachment; filename=threatmodel' + fileExtension
@@ -1017,7 +1034,7 @@ def engagement_ics(request, eid):
         "Set aside for engagement %s, on product %s.  Additional detail can be found at %s"
         % (eng.name, eng.product.name,
            request.build_absolute_uri(
-               (reverse("view_engagement", args=(eng.id, ))))), uid)
+               (reverse("view_engagement", args=(eng.id,))))), uid)
     output = cal.serialize()
     response = HttpResponse(content=output)
     response['Content-Type'] = 'text/calendar'

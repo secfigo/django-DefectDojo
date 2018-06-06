@@ -1,74 +1,96 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import tempfile
-from datetime import datetime, timedelta
-
-from django.db.models import Count
-from django.conf import settings
-from django.core.files.base import ContentFile
-from django.core.mail import send_mail
-from django.core.urlresolvers import reverse
-from django.template.loader import render_to_string
-from django.utils.http import urlencode
-from celery.utils.log import get_task_logger
-from celery.decorators import task
-from dojo.models import Finding, Test, Engagement, System_Settings
-from django.utils import timezone
+import logging
+from datetime import timedelta
 
 import pdfkit
-from dojo.celery import app
-from dojo.utils import sync_dedupe, sync_false_history
-from dojo.reports.widgets import report_widget_factory
-from dojo.utils import add_comment, add_epic, add_issue, update_epic, update_issue, \
-                        close_epic, get_system_setting, create_notification
+from celery.utils.log import get_task_logger
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.core.files.temp import NamedTemporaryFile
+from django.core.urlresolvers import reverse
+from django.db.models import Count
+from django.template.loader import render_to_string
+from django.utils import timezone
+from django.utils.http import urlencode
 
-import logging
+from dojo.celery import app
+from dojo.models import Finding, Engagement, System_Settings
+from dojo.reports.widgets import report_widget_factory
+from dojo.utils import add_comment, add_epic, add_issue, update_epic, \
+    update_issue, \
+    close_epic, create_notification
+from dojo.utils import sync_dedupe, sync_false_history
+
 fmt = getattr(settings, 'LOG_FORMAT', None)
 lvl = getattr(settings, 'LOG_LEVEL', logging.DEBUG)
 logging.basicConfig(format=fmt, level=lvl)
 
 logger = get_task_logger(__name__)
 
+
 # Logs the error to the alerts table, which appears in the notification toolbar
 def log_generic_alert(source, title, description):
     create_notification(event='other', title=title, description=description,
-                       icon='bullseye', source=source)
+                        icon='bullseye', source=source)
+
 
 @app.task(bind=True)
 def add_alerts(self, runinterval):
     now = timezone.now()
 
-    upcoming_engagements = Engagement.objects.filter(target_start__gt=now+timedelta(days=3),target_start__lt=now+timedelta(days=3)+runinterval).order_by('target_start')
+    upcoming_engagements = Engagement.objects.filter(
+        target_start__gt=now + timedelta(days=3),
+        target_start__lt=now + timedelta(days=3) + runinterval).order_by(
+        'target_start')
     for engagement in upcoming_engagements:
         create_notification(event='upcoming_engagement',
-                           title='Upcoming engagement: %s' % engagement.name,
-                           engagement=engagement,
-                           recipients=[engagement.lead],
-                           url=request.build_absolute_uri(reverse('view_engagement', args=(engagement.id,))))
+                            title='Upcoming engagement: %s' % engagement.name,
+                            engagement=engagement,
+                            recipients=[engagement.lead],
+                            url=request.build_absolute_uri(
+                                reverse('view_engagement',
+                                        args=(engagement.id,))))
 
     stale_engagements = Engagement.objects.filter(
-        target_start__gt=now-runinterval,
+        target_start__gt=now - runinterval,
         target_end__lt=now,
         status='In Progress').order_by('-target_end')
     for eng in stale_engagements:
         create_notification(event='stale_engagement',
-                           title='Stale Engagement: %s' % eng.name,
-                           description='The engagement "%s" is stale. Target end was %s.' % (eng.name, eng.target_end.strftime("%b. %d, %Y")),
-                           url=reverse('view_engagement', args=(eng.id,)),
-                           recipients=[eng.lead])
+                            title='Stale Engagement: %s' % eng.name,
+                            description='The engagement "%s" is stale. Target end was %s.' % (
+                                eng.name,
+                                eng.target_end.strftime("%b. %d, %Y")),
+                            url=reverse('view_engagement', args=(eng.id,)),
+                            recipients=[eng.lead])
 
 
 @app.task(bind=True)
-def async_pdf_report(self,
-                     report=None,
-                     template="None",
-                     filename='report.pdf',
-                     report_title=None,
-                     report_subtitle=None,
-                     report_info=None,
-                     context={},
-                     uri=None):
+def async_pdf_report(self, report, template="None", filename='report.pdf',
+                     report_title=None, report_subtitle=None, report_info=None,
+                     context={}, uri=None):
+    """
+    Generates a pdf report in an asynchronous manner (i.e. in a task)
+
+    :param Report report:
+    :param str template: a path to a template
+    :param str filename: the name of the resulting file
+    :param str report_title: a human readable report title
+    :param str report_subtitle: a human readable subtitle
+    :param str report_info: human readable meta info ("Generated by ... on ...")
+    :param dict context: a context passed ultimately to the rendering mechanism
+    :param str uri: the generated download URL as a string
+    :return: Returns a boolean True
+    :rtype: bool
+    """
+
+    # Validate assumptions before starting report generation
+    if not 'host' in context:
+        raise ValueError("The passed context should contain a host field")
+
     xsl_style_sheet = settings.DOJO_ROOT + "/static/dojo/xsl/pdf_toc.xsl"
     x = urlencode({'title': report_title,
                    'subtitle': report_subtitle,
@@ -93,38 +115,56 @@ def async_pdf_report(self,
                                  cover=cover,
                                  toc=toc)
         if report.file.name:
-            with open(report.file.path, 'w') as f:
-                f.write(pdf)
-            f.close()
+            default_storage.save(report.file.path, ContentFile(pdf))
         else:
-            f = ContentFile(pdf)
-            report.file.save(filename, f)
+            default_storage.save(filename, ContentFile(pdf))
         report.status = 'success'
         report.done_datetime = timezone.now()
         report.save()
 
-        create_notification(event='report_created', title='Report created', description='The report "%s" is ready.' % report.name, url=uri, report=report, objowner=report.requester)
+        create_notification(event='report_created', title='Report created',
+                            description='The report "%s" is ready.' % report.name,
+                            url=uri, report=report, objowner=report.requester)
+    except IOError as e:
+        report.status = 'error'
+        report.save()
+        logger.error("Report creation failure - make sure WKHTMLTOPDF "
+                     "is installed. %s" % str(e))
+        log_generic_alert("PDF Report", "Report Creation Failure",
+                          "Make sure WKHTMLTOPDF is installed. " + str(e))
     except Exception as e:
         report.status = 'error'
         report.save()
-        log_generic_alert("PDF Report", "Report Creation Failure", "Make sure WKHTMLTOPDF is installed. " + str(e))
+        log_generic_alert("PDF Report", "Report Creation Failure",
+                          "Something went terribly wrong. " + str(e))
     return True
 
 
 @app.task(bind=True)
-def async_custom_pdf_report(self,
-                            report=None,
-                            template="None",
-                            filename='report.pdf',
-                            host=None,
-                            user=None,
-                            uri=None,
-                            finding_notes=False,
+def async_custom_pdf_report(self, report=None, template="None",
+                            filename='report.pdf', host=None, user=None,
+                            uri=None, finding_notes=False,
                             finding_images=False):
+    """
+    Generates a pdf report in an asynchronous manner (i.e. in a task)
+    :param Report report: a Report object
+    :param str template: a path to a template
+    :param str filename: the name of the resulting file
+    :param str host:
+    :param str user:
+    :param str uri:
+    :param dict finding_notes:
+    :param str finding_images:
+    :return: Returns a boolean True
+    :rtype: bool
+    """
     config = pdfkit.configuration(wkhtmltopdf=settings.WKHTMLTOPDF_PATH)
 
-    selected_widgets = report_widget_factory(json_data=report.options, request=None, user=user,
-                                             finding_notes=finding_notes, finding_images=finding_images, host=host)
+    selected_widgets = report_widget_factory(json_data=report.options,
+                                             request=None, user=user,
+                                             finding_notes=finding_notes,
+                                             finding_images=finding_images,
+                                             host=host)
 
     widgets = selected_widgets.values()
     temp = None
@@ -138,14 +178,15 @@ def async_custom_pdf_report(self,
 
         if 'table-of-contents' in selected_widgets:
             xsl_style_sheet_tempalte = "dojo/pdf_toc.xsl"
-            temp = tempfile.NamedTemporaryFile()
+            temp = NamedTemporaryFile()
 
             toc_settings = selected_widgets['table-of-contents']
 
             toc_depth = toc_settings.depth
-            toc_bytes = render_to_string(xsl_style_sheet_tempalte, {'widgets': widgets,
-                                                                    'depth': toc_depth,
-                                                                    'title': toc_settings.title})
+            toc_bytes = render_to_string(xsl_style_sheet_tempalte,
+                                         {'widgets': widgets,
+                                          'depth': toc_depth,
+                                          'title': toc_settings.title})
             temp.write(toc_bytes)
             temp.seek(0)
 
@@ -153,11 +194,11 @@ def async_custom_pdf_report(self,
                    'xsl-style-sheet': temp.name}
 
         # default the cover to not come first by default
-        cover_first_val=False
+        cover_first_val = False
 
         cover = None
         if 'cover-page' in selected_widgets:
-            cover_first_val=True
+            cover_first_val = True
             cp = selected_widgets['cover-page']
             x = urlencode({'title': cp.title,
                            'subtitle': cp.sub_heading,
@@ -176,23 +217,23 @@ def async_custom_pdf_report(self,
                                  cover_first=cover_first_val)
 
         if report.file.name:
-            with open(report.file.path, 'w') as f:
-                f.write(pdf)
-            f.close()
+            default_storage.save(report.file.path, ContentFile(pdf))
         else:
-            f = ContentFile(pdf)
-            report.file.save(filename, f)
+            default_storage.save(filename, ContentFile(pdf))
         report.status = 'success'
         report.done_datetime = timezone.now()
         report.save()
 
-        create_notification(event='report_created', title='Report created', description='The report "%s" is ready.' % report.name, url=uri, report=report, objowner=report.requester)
+        create_notification(event='report_created', title='Report created',
+                            description='The report "%s" is ready.' % report.name,
+                            url=uri, report=report, objowner=report.requester)
     except Exception as e:
         report.status = 'error'
         report.save()
         # email_requester(report, uri, error=e)
-        #raise e
-        log_generic_alert("PDF Report", "Report Creation Failure", "Make sure WKHTMLTOPDF is installed. " + str(e))
+        # raise e
+        log_generic_alert("PDF Report", "Report Creation Failure",
+                          "Make sure WKHTMLTOPDF is installed. " + str(e))
     finally:
         if temp is not None:
             # deleting temp xsl file
@@ -200,45 +241,54 @@ def async_custom_pdf_report(self,
 
     return True
 
-@task(name='add_issue_task')
-def add_issue_task( find, push_to_jira):
+
+@app.task(name='add_issue_task')
+def add_issue_task(find, push_to_jira):
     logger.info("add issue task")
     add_issue(find, push_to_jira)
 
-@task(name='update_issue_task')
+
+@app.task(name='update_issue_task')
 def update_issue_task(find, old_status, push_to_jira):
     logger.info("add issue task")
     update_issue(find, old_status, push_to_jira)
 
-@task(name='add_epic_task')
+
+@app.task(name='add_epic_task')
 def add_epic_task(eng, push_to_jira):
     logger.info("add epic task")
     add_epic(eng, push_to_jira)
 
-@task(name='update_epic_task')
+
+@app.task(name='update_epic_task')
 def update_epic_task(eng, push_to_jira):
     logger.info("update epic task")
     update_epic(eng, push_to_jira)
 
-@task(name='close_epic_task')
+
+@app.task(name='close_epic_task')
 def close_epic_task(eng, push_to_jira):
     logger.info("close epic task")
     close_epic(eng, push_to_jira)
 
-@task(name='add comment')
+
+@app.task(name='add comment')
 def add_comment_task(find, note):
     logger.info("add comment")
     add_comment(find, note)
+
 
 @app.task(name='async_dedupe')
 def async_dedupe(new_finding, *args, **kwargs):
     logger.info("running deduplication")
     sync_dedupe(new_finding, *args, **kwargs)
 
+
 @app.task(name='async_false_history')
 def async_false_history(new_finding, *args, **kwargs):
     logger.info("running false_history")
     sync_false_history(new_finding, *args, **kwargs)
+
 
 @app.task(bind=True)
 def async_dupe_delete(*args, **kwargs):
@@ -246,10 +296,12 @@ def async_dupe_delete(*args, **kwargs):
     system_settings = System_Settings.objects.get()
     if system_settings.delete_dupulicates:
         dupe_max = system_settings.max_dupes
-        findings = Finding.objects.all().annotate(num_dupes=Count('duplicate_list')).filter(num_dupes__gt=dupe_max)
+        findings = Finding.objects.all().annotate(
+            num_dupes=Count('duplicate_list')).filter(num_dupes__gt=dupe_max)
         for finding in findings:
-            duplicate_list = finding.duplicate_list.all().order_by('date').all()
-            dupe_count =  len(duplicate_list) - dupe_max
+            duplicate_list = finding.duplicate_list.all().order_by(
+                'date').all()
+            dupe_count = len(duplicate_list) - dupe_max
             for finding in duplicate_list:
                 finding.delete()
                 dupe_count = dupe_count - 1

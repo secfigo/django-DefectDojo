@@ -3,15 +3,19 @@
 # by John Kim
 # Thanks to Securicon, LLC. for sponsoring development
 #
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 
-#Modified by Greg
+# Modified by Greg
 
 import argparse
 import csv
 import re
-from dojo.models import Finding, Endpoint
 from urlparse import urlparse
+
+from django.core.files.storage import default_storage
+
+from dojo.models import Finding, Endpoint
+
 ################################################################
 
 # Non-standard libraries
@@ -59,6 +63,7 @@ REPORT_HEADERS = ['CVSS_score',
                   'links',
                   'cve']
 
+
 ################################################################
 
 def htmltext(blob):
@@ -68,11 +73,14 @@ def htmltext(blob):
 
 
 def report_writer(report_dic, output_filename):
-    with open(output_filename, "wb") as outFile:
-        csvWriter = utfdictcsv.DictUnicodeWriter(outFile, REPORT_HEADERS, quoting=csv.QUOTE_ALL)
+    # TODO: Clarify whether this function is ever used.
+    with default_storage.open(output_filename, "wb") as outFile:
+        csvWriter = utfdictcsv.DictUnicodeWriter(outFile, REPORT_HEADERS,
+                                                 quoting=csv.QUOTE_ALL)
         csvWriter.writerow(CUSTOM_HEADERS)
         csvWriter.writerows(report_dic)
     print "Successfully parsed."
+
 
 ################################################################
 
@@ -81,12 +89,13 @@ def issue_r(raw_row, vuln):
     issue_row = {}
 
     # IP ADDRESS
-    issue_row['ip_address']  = raw_row.findtext('IP')
+    issue_row['ip_address'] = raw_row.findtext('IP')
 
     # FQDN
-    issue_row['fqdn'] =raw_row.findtext('DNS')
+    issue_row['fqdn'] = raw_row.findtext('DNS')
     fqdn_parts = urlparse(issue_row['fqdn'])
-    ep = Endpoint(host=fqdn_parts.netloc, path=fqdn_parts.path, query=fqdn_parts.query, fragment=fqdn_parts.fragment)
+    ep = Endpoint(host=fqdn_parts.netloc, path=fqdn_parts.path,
+                  query=fqdn_parts.query, fragment=fqdn_parts.fragment)
 
     # OS NAME
     issue_row['os'] = raw_row.findtext('OPERATING_SYSTEM')
@@ -99,19 +108,22 @@ def issue_r(raw_row, vuln):
         _port = vuln_details.findtext('PORT')
         _temp['port_status'] = _port
 
-        search = "//GLOSSARY/VULN_DETAILS_LIST/VULN_DETAILS[@id='{}']".format(_gid)
+        search = "//GLOSSARY/VULN_DETAILS_LIST/VULN_DETAILS[@id='{}']".format(
+            _gid)
         vuln_item = vuln.find(search)
         if vuln_item is not None:
             finding = Finding()
             # Vuln name
             _temp['vuln_name'] = vuln_item.findtext('TITLE')
 
-
-            #Solution Strips Heading Workaround(s)
-            _temp['solution'] = re.sub('Workaround(s)?:.+\n', '', htmltext(vuln_item.findtext('SOLUTION')))
+            # Solution Strips Heading Workaround(s)
+            _temp['solution'] = re.sub('Workaround(s)?:.+\n', '', htmltext(
+                vuln_item.findtext('SOLUTION')))
 
             # Vuln_description
-            _temp['vuln_description'] = "\n".join([htmltext(vuln_item.findtext('THREAT')), htmltext(vuln_item.findtext('IMPACT'))])
+            _temp['vuln_description'] = "\n".join(
+                [htmltext(vuln_item.findtext('THREAT')),
+                 htmltext(vuln_item.findtext('IMPACT'))])
 
             # CVSS
             _temp['CVSS_score'] = vuln_item.findtext('CVSS_SCORE/CVSS_BASE')
@@ -119,28 +131,33 @@ def issue_r(raw_row, vuln):
             # CVE and LINKS
             _temp_cve_details = vuln_item.iterfind('CVE_ID_LIST/CVE_ID')
             if _temp_cve_details:
-                _cl = {cve_detail.findtext('ID'): cve_detail.findtext('URL') for cve_detail in _temp_cve_details}
+                _cl = {cve_detail.findtext('ID'): cve_detail.findtext('URL')
+                       for cve_detail in _temp_cve_details}
                 _temp['cve'] = "\n".join(_cl.keys())
                 _temp['links'] = "\n".join(_cl.values())
             sev = 'Low'
-            if 0.1 <= float(_temp['CVSS_score']) <= 3.9 :
+            if 0.1 <= float(_temp['CVSS_score']) <= 3.9:
                 sev = 'Low'
             elif 4.0 <= float(_temp['CVSS_score']) <= 6.9:
                 sev = 'Medium'
-            elif 7.0 <= float(_temp['CVSS_score']) <= 8.9 :
+            elif 7.0 <= float(_temp['CVSS_score']) <= 8.9:
                 sev = 'High'
             else:
                 sev = 'Critical'
             finding = None
             if _temp_cve_details:
                 refs = "\n".join(_cl.values())
-                finding = Finding(title= _temp['vuln_name'], mitigation = _temp['solution'],
-                              description = _temp['vuln_description'], severity= sev,
-                               references= refs )
+                finding = Finding(title=_temp['vuln_name'],
+                                  mitigation=_temp['solution'],
+                                  description=_temp['vuln_description'],
+                                  severity=sev,
+                                  references=refs)
 
             else:
-                finding = Finding(title= _temp['vuln_name'], mitigation = _temp['solution'],
-                                  description = _temp['vuln_description'], severity= sev)
+                finding = Finding(title=_temp['vuln_name'],
+                                  mitigation=_temp['solution'],
+                                  description=_temp['vuln_description'],
+                                  severity=sev)
             finding.unsaved_endpoints = list()
             finding.unsaved_endpoints.append(ep)
             ret_rows.append(finding)
@@ -148,7 +165,8 @@ def issue_r(raw_row, vuln):
 
 
 def qualys_parser(qualys_xml_file):
-    parser = etree.XMLParser(remove_blank_text=True, no_network=True, recover=True)
+    parser = etree.XMLParser(remove_blank_text=True, no_network=True,
+                             recover=True)
     d = etree.parse(qualys_xml_file, parser)
     r = d.xpath('//ASSET_DATA_REPORT/HOST_LIST/HOST')
     master_list = []
@@ -156,22 +174,24 @@ def qualys_parser(qualys_xml_file):
     for issue in r:
         master_list += issue_r(issue, d)
     return master_list
-    #report_writer(master_list, args.outfile)
+    # report_writer(master_list, args.outfile)
+
 
 ################################################################
 
 if __name__ == "__main__":
 
     # Parse args
-    aparser = argparse.ArgumentParser(description='Converts Qualys XML results to .csv file.')
+    aparser = argparse.ArgumentParser(
+        description='Converts Qualys XML results to .csv file.')
     aparser.add_argument('--out',
-                        dest='outfile',
-                        default='qualys.csv',
-                        help="WARNING: By default, output will overwrite current path to the file named 'qualys.csv'")
+                         dest='outfile',
+                         default='qualys.csv',
+                         help="WARNING: By default, output will overwrite current path to the file named 'qualys.csv'")
 
     aparser.add_argument('qualys_xml_file',
-                        type=str,
-                        help='Qualys xml file.')
+                         type=str,
+                         help='Qualys xml file.')
 
     args = aparser.parse_args()
 
@@ -181,7 +201,7 @@ if __name__ == "__main__":
         print "[!] Error processing file: {}".format(args.qualys_xml_file)
         exit()
 
+
 class QualysParser(object):
     def __init__(self, file, test):
         self.items = qualys_parser(file)
-
