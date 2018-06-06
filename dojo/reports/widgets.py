@@ -13,7 +13,7 @@ from django.utils.safestring import mark_safe
 
 from dojo.filters import EndpointFilter, ReportAuthedFindingFilter
 from dojo.forms import CustomReportOptionsForm
-from dojo.models import Endpoint, Finding
+from dojo.models import Endpoint, Finding, FindingImage
 from dojo.utils import get_page_items
 
 """
@@ -259,8 +259,8 @@ class FindingList(Widget):
         else:
             self.finding_notes = False
 
-        if 'finding_images' in kwargs:
-            self.finding_images = kwargs.get('finding_images')
+        if FindingImage.UPLOAD_DIRECTORY in kwargs:
+            self.finding_images = kwargs.get(FindingImage.UPLOAD_DIRECTORY)
         else:
             self.finding_images = False
 

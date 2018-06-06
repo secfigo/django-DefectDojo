@@ -1260,7 +1260,10 @@ class Report(models.Model):
 
 
 class FindingImage(models.Model):
-    image = models.ImageField(upload_to='finding_images', null=True)
+    UPLOAD_DIRECTORY = 'finding_images'
+    """The directory below MEDIA_ROOT to be used for image uploads"""
+    
+    image = models.ImageField(upload_to=UPLOAD_DIRECTORY, null=True)
     image_thumbnail = ImageSpecField(source='image',
                                      processors=[ResizeToCover(100, 100)],
                                      format='JPEG',

@@ -1161,14 +1161,13 @@ def remove_finding_image_from_storage(finding_image):
                   finding_image.image_small,
                   finding_image.image_medium,
                   finding_image.image_large]:
-        image_path = os.path.join(settings.MEDIA_ROOT, image.name)
-        if image and default_storage.exists(image_path):
+        if image and default_storage.exists(image.name):
             try:
-                default_storage.delete(image_path)
+                default_storage.delete(image.name)
             except NotImplementedError:
                 logger.warning("The configured file storage "
                                "backend was not able to delete "
-                               "file %s" % image_path)
+                               "file %s" % image.name)
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -1210,8 +1209,7 @@ def manage_images(request, fid):
 
                         # TODO: Clarify whether we actually write to this cache at some point; if not, this code is not used
                         # CACHE is used by ImageSpecFields to generate thumbnails and images of different sizes. Clarify, whether there's not a more elegant method
-                        cache_to_remove = os.path.join(settings.MEDIA_ROOT,
-                                                       'CACHE', 'images',
+                        cache_to_remove = os.path.join('CACHE', 'images',
                                                        'finding_images',
                                                        os.path.splitext(file)[
                                                            0])

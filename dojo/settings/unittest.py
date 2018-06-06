@@ -12,3 +12,5 @@ DATABASES = {
         'NAME': 'unittest.sqlite',
     }
 }
+
+MEDIA_ROOT = './dojo/uploads'
