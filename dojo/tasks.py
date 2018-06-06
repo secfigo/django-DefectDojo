@@ -69,12 +69,12 @@ def add_alerts(self, runinterval):
 
 
 @app.task(bind=True)
-def async_pdf_report(self, report=None, template="None", filename='report.pdf',
+def async_pdf_report(self, report, template="None", filename='report.pdf',
                      report_title=None, report_subtitle=None, report_info=None,
                      context={}, uri=None):
     """
     Generates a pdf report in an asynchronous manner (i.e. in a task)
-    :param self:
+
     :param Report report:
     :param str template: a path to a template
     :param str filename: the name of the resulting file
@@ -86,6 +86,11 @@ def async_pdf_report(self, report=None, template="None", filename='report.pdf',
     :return: Returns a boolean True
     :rtype: bool
     """
+
+    # Validate assumptions before starting report generation
+    if not 'host' in context:
+        raise ValueError("The passed context should contain a host field")
+
     xsl_style_sheet = settings.DOJO_ROOT + "/static/dojo/xsl/pdf_toc.xsl"
     x = urlencode({'title': report_title,
                    'subtitle': report_subtitle,
@@ -120,11 +125,18 @@ def async_pdf_report(self, report=None, template="None", filename='report.pdf',
         create_notification(event='report_created', title='Report created',
                             description='The report "%s" is ready.' % report.name,
                             url=uri, report=report, objowner=report.requester)
+    except IOError as e:
+        report.status = 'error'
+        report.save()
+        logger.error("Report creation failure - make sure WKHTMLTOPDF "
+                     "is installed. %s" % str(e))
+        log_generic_alert("PDF Report", "Report Creation Failure",
+                          "Make sure WKHTMLTOPDF is installed. " + str(e))
     except Exception as e:
         report.status = 'error'
         report.save()
         log_generic_alert("PDF Report", "Report Creation Failure",
-                          "Make sure WKHTMLTOPDF is installed. " + str(e))
+                          "Something went terribly wrong. " + str(e))
     return True
 
 
