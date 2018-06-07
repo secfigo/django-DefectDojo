@@ -161,7 +161,7 @@ def qualys_webapp_parser(qualys_xml_file, test):
     r = d.xpath(
         '/WAS_WEBAPP_REPORT/RESULTS/WEB_APPLICATION/VULNERABILITY_LIST/VULNERABILITY')
     # r = d.xpath('/WAS_SCAN_REPORT/RESULTS/VULNERABILITY_LIST/VULNERABILITY')
-    l = d.xpath(
+    l_info = d.xpath(
         '/WAS_WEBAPP_REPORT/RESULTS/WEB_APPLICATION/INFORMATION_GATHERED_LIST/INFORMATION_GATHERED')
     # l = d.xpath('/WAS_SCAN_REPORT/RESULTS/INFORMATION_GATHERED_LIST/INFORMATION_GATHERED')
 
@@ -170,7 +170,7 @@ def qualys_webapp_parser(qualys_xml_file, test):
     for issue in r:
         master_list += issue_r(issue, d, test, "vul")
 
-    for issue in l:
+    for issue in l_info:
         master_list += issue_r(issue, d, test, "info")
 
     return master_list

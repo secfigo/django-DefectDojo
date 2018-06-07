@@ -50,9 +50,8 @@ def add_alerts(self, runinterval):
                             title='Upcoming engagement: %s' % engagement.name,
                             engagement=engagement,
                             recipients=[engagement.lead],
-                            url=request.build_absolute_uri(
-                                reverse('view_engagement',
-                                        args=(engagement.id,))))
+                            url=reverse('view_engagement',
+                                        args=(engagement.id,)))
 
     stale_engagements = Engagement.objects.filter(
         target_start__gt=now - runinterval,
@@ -88,7 +87,7 @@ def async_pdf_report(self, report, template="None", filename='report.pdf',
     """
 
     # Validate assumptions before starting report generation
-    if not 'host' in context:
+    if 'host' not in context:
         raise ValueError("The passed context should contain a host field")
 
     xsl_style_sheet = settings.DOJO_ROOT + "/static/dojo/xsl/pdf_toc.xsl"

@@ -294,12 +294,9 @@ def add_breadcrumb(parent=None,
                 'url'] else crumb['url'][:crumb['url'].index('?')]
             crumb_view = resolver(crumb_to_resolve)
             for obj_crumb in obj_crumbs:
-                obj_crumb_to_resolve = obj_crumb[
-                    'url'] if '?' not in obj_crumb['url'] else obj_crumb[
-                                                                   'url'][
-                                                               :obj_crumb[
-                                                                   'url'].index(
-                                                                   '?')]
+                obj_crumb_to_resolve = obj_crumb['url'] \
+                    if '?' not in obj_crumb['url'] \
+                    else obj_crumb['url'][:obj_crumb['url'].index('?')]
                 obj_crumb_view = resolver(obj_crumb_to_resolve)
 
                 if crumb_view.view_name == obj_crumb_view.view_name:
@@ -340,8 +337,8 @@ def get_punchcard_data(findings, weeks_between, start_date):
                     # [0,0,(20*.02)]
                     # [week, day, weight]
                     days[day_offset[finding.date.weekday()]] += 1
-                    if days[
-                        day_offset[finding.date.weekday()]] > highest_count:
+                    if days[day_offset[finding.date.weekday()]] > \
+                            highest_count:
                         highest_count = days[day_offset[
                             finding.date.weekday()]]
             except:
@@ -349,11 +346,10 @@ def get_punchcard_data(findings, weeks_between, start_date):
                     # [0,0,(20*.02)]
                     # [week, day, weight]
                     days[day_offset[finding.date.weekday()]] += 1
-                    if days[
-                        day_offset[finding.date.weekday()]] > highest_count:
+                    if days[day_offset[finding.date.weekday()]] > \
+                            highest_count:
                         highest_count = days[day_offset[
                             finding.date.weekday()]]
-                pass
 
         if sum(days.values()) > 0:
             for day, count in days.items():
@@ -394,9 +390,8 @@ def get_period_counts_legacy(findings,
             # make interval the first through last of month
             end_date = (start_date + relativedelta(months=x)) + relativedelta(
                 day=1, months=+1, days=-1)
-            new_date = (
-                               start_date + relativedelta(
-                           months=x)) + relativedelta(day=1)
+            new_date = (start_date + relativedelta(months=x)) + relativedelta(
+                day=1)
         else:
             # week starts the monday before
             new_date = start_date + relativedelta(weeks=x, weekday=MO(1))
@@ -494,9 +489,8 @@ def get_period_counts(active_findings,
             # make interval the first through last of month
             end_date = (start_date + relativedelta(months=x)) + relativedelta(
                 day=1, months=+1, days=-1)
-            new_date = (
-                               start_date + relativedelta(
-                           months=x)) + relativedelta(day=1)
+            new_date = (start_date + relativedelta(months=x)) + relativedelta(
+                day=1)
         else:
             # week starts the monday before
             new_date = start_date + relativedelta(weeks=x, weekday=MO(1))
@@ -1360,10 +1354,8 @@ def create_notification(event=None, **kwargs):
                 url='https://%s/v2/room/%s/notification?auth_token=%s' %
                     (get_system_setting('hipchat_site'), channel,
                      get_system_setting('hipchat_token')),
-                data={
-                    'message': create_notification_message(event, 'slack'),
-                    'message_format': 'text'
-                })
+                data={'message': create_notification_message(event, 'slack'),
+                      'message_format': 'text', })
         except Exception as e:
             log_alert(e)
             pass

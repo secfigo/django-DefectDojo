@@ -1,6 +1,5 @@
 import logging
 import mimetypes
-import os
 import urllib
 from datetime import datetime
 
@@ -37,8 +36,9 @@ logger = logging.getLogger(__name__)
 
 def report_url_resolver(request):
     try:
-        url_resolver = request.META['HTTP_X_FORWARDED_PROTO'] + "://" + \
-                       request.META['HTTP_X_FORWARDED_FOR']
+        url_resolver = "{proto}://{fwd_for}".format(
+            proto=request.META['HTTP_X_FORWARDED_PROTO'],
+            fwd_for=request.META['HTTP_X_FORWARDED_FOR'])
     except:
         hostname = request.META['HTTP_HOST']
         port_index = hostname.find(":")
@@ -430,8 +430,7 @@ def product_endpoint_report(request, pid):
     try:
         start_date = \
             Finding.objects.filter(endpoints__in=endpoints.qs).order_by(
-                'date')[
-            :1][0].date
+                'date')[:1][0].date
     except:
         start_date = timezone.now()
 
@@ -440,9 +439,8 @@ def product_endpoint_report(request, pid):
     risk_acceptances = Risk_Acceptance.objects.filter(
         engagement__test__finding__endpoints__in=endpoints.qs)
 
-    accepted_findings = [finding for ra in risk_acceptances
-                         for finding in ra.accepted_findings.filter(
-            endpoints__in=endpoints.qs)]
+    accepted_findings = [finding for ra in risk_acceptances for finding in
+                         ra.accepted_findings.filter(endpoints__in=endpoints.qs)]
 
     verified_findings = Finding.objects.filter(endpoints__in=endpoints.qs,
                                                date__range=[start_date,

@@ -1,5 +1,4 @@
 import csv
-import os
 import re
 from xml.dom import NamespaceErr
 
@@ -36,11 +35,13 @@ class NessusCSVParser(object):
                                        "rb").read().replace("\r", "\n")
         # content = re.sub("\"(.*?)\n(.*?)\"", "\"\1\2\"", content)
         # content = re.sub("(?<=\")\n", "\\\\n", content)
-        with default_storage.open("%s-filtered" % filename.temporary_file_path(), "wb") as out:
+        with default_storage.open(
+                "%s-filtered" % filename.temporary_file_path(), "wb") as out:
             out.write(content)
 
-        with default_storage.open("%s-filtered" % filename.temporary_file_path(),
-                  "rb") as scan_file:
+        with default_storage.open(
+                "%s-filtered" % filename.temporary_file_path(),
+                "rb") as scan_file:
             reader = csv.reader(scan_file,
                                 lineterminator="\n",
                                 quoting=csv.QUOTE_ALL)
@@ -126,8 +127,7 @@ class NessusCSVParser(object):
                         find.description += dat['plugin_output']
                 else:
                     if dat['plugin_output'] is not None:
-                        dat['description'] = dat['description'] + \
-                                             dat['plugin_output']
+                        dat['description'] += dat['plugin_output']
                     find = Finding(title=dat['title'],
                                    test=test,
                                    active=False,
@@ -136,8 +136,8 @@ class NessusCSVParser(object):
                                    severity=dat['severity'],
                                    numerical_severity=Finding.get_numerical_severity(
                                        dat['severity']),
-                                   mitigation=dat['mitigation'] if dat[
-                                                                       'mitigation'] is not None else 'N/A',
+                                   mitigation=dat['mitigation']
+                                        if dat['mitigation'] is not None else 'N/A',
                                    impact=dat['impact'],
                                    references=dat['references'],
                                    url=dat['endpoint'])
@@ -186,10 +186,12 @@ class NessusXMLParser(object):
                     if item.find("synopsis") is not None:
                         description = item.find("synopsis").text + "\n\n"
                     if item.find("plugin_output") is not None:
-                        plugin_output = "Plugin Output: " + ip + (
-                            (
-                                    ":" + port) if port is not None else "") + " " + item.find(
-                            "plugin_output").text + "\n\n"
+                        addr = str(ip)
+                        if port:
+                            addr += ":" + str(port)
+                        plugin_output = "Plugin Output: {addr} {plugin_out}\n\n".format(
+                            addr=addr,
+                            plugin_out=item.find("plugin_output").text)
                         description += plugin_output
 
                     nessus_severity_id = int(item.attrib["severity"])
