@@ -6,33 +6,39 @@ import mimetypes
 import os
 import shutil
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import default_storage
 from django.core.urlresolvers import reverse
 from django.http import Http404, HttpResponse
 from django.http import HttpResponseRedirect, HttpResponseForbidden
 from django.http import StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404
 from django.utils import formats
-from django.utils.safestring import mark_safe
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 
 from dojo.filters import OpenFindingFilter, \
     OpenFingingSuperFilter, AcceptedFingingSuperFilter, \
     ClosedFingingSuperFilter, TemplateFindingFilter
-from dojo.forms import NoteForm, CloseFindingForm, FindingForm, PromoteFindingForm, FindingTemplateForm, \
-    DeleteFindingTemplateForm, FindingImageFormSet, JIRAFindingForm, ReviewFindingForm, ClearFindingReviewForm, \
-    DefectFindingForm, StubFindingForm, DeleteFindingForm, DeleteStubFindingForm, ApplyFindingTemplateForm, FindingBulkUpdateForm
+from dojo.forms import NoteForm, CloseFindingForm, FindingForm, \
+    PromoteFindingForm, FindingTemplateForm, \
+    DeleteFindingTemplateForm, FindingImageFormSet, JIRAFindingForm, \
+    ReviewFindingForm, ClearFindingReviewForm, \
+    DefectFindingForm, StubFindingForm, DeleteFindingForm, \
+    DeleteStubFindingForm, ApplyFindingTemplateForm, FindingBulkUpdateForm
 from dojo.models import Product_Type, Finding, Notes, \
-    Risk_Acceptance, BurpRawRequestResponse, Stub_Finding, Endpoint, Finding_Template, FindingImage, \
-    FindingImageAccessToken, JIRA_Issue, JIRA_PKey, Dojo_User, Cred_Mapping, Test, System_Settings
-from dojo.utils import get_page_items, add_breadcrumb, FileIterWrapper, process_notifications, \
-    add_comment, jira_get_resolution_id, jira_change_resolution_id, get_jira_connection, \
-    get_system_setting, create_notification, tab_view_count
-
+    Risk_Acceptance, BurpRawRequestResponse, Stub_Finding, Endpoint, \
+    Finding_Template, FindingImage, \
+    FindingImageAccessToken, JIRA_Issue, JIRA_PKey, Dojo_User, Cred_Mapping, \
+    Test, System_Settings
 from dojo.tasks import add_issue_task, update_issue_task, add_comment_task
+from dojo.utils import get_page_items, add_breadcrumb, FileIterWrapper, \
+    process_notifications, \
+    add_comment, jira_get_resolution_id, jira_change_resolution_id, \
+    get_jira_connection, \
+    get_system_setting, create_notification, tab_view_count
 
 logger = logging.getLogger(__name__)
 """
@@ -95,7 +101,8 @@ def open_findings(request, pid=None):
     if pid:
         active_tab = "findings"
         show_product_column = False
-        tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(pid)
+        tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+            pid)
 
     system_settings = System_Settings.objects.get()
     return render(
@@ -182,7 +189,7 @@ def view_finding(request, fid):
         test=finding.test.id).select_related('cred_id').order_by('cred_id')
     cred_engagement = Cred_Mapping.objects.filter(
         engagement=finding.test.engagement.id).select_related(
-            'cred_id').order_by('cred_id')
+        'cred_id').order_by('cred_id')
     user = request.user
     try:
         jissue = JIRA_Issue.objects.get(finding=finding)
@@ -219,7 +226,7 @@ def view_finding(request, fid):
                 add_comment_task(finding, new_note)
             form = NoteForm()
             url = request.build_absolute_uri(
-                reverse("view_finding", args=(finding.id, )))
+                reverse("view_finding", args=(finding.id,)))
             title = "Finding: " + finding.title
             process_notifications(request, new_note, url, title)
             messages.add_message(
@@ -241,7 +248,8 @@ def view_finding(request, fid):
 
     add_breadcrumb(parent=finding, top_level=False, request=request)
     system_settings = System_Settings.objects.get()
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(finding.test.engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        finding.test.engagement.product.id)
 
     return render(
         request, 'dojo/view_finding.html', {
@@ -297,7 +305,7 @@ def close_finding(request, fid):
                 'Finding closed.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_test', args=(finding.test.id, )))
+                reverse('view_test', args=(finding.test.id,)))
 
     else:
         form = CloseFindingForm()
@@ -306,7 +314,8 @@ def close_finding(request, fid):
         parent=finding, title="Close", top_level=False, request=request)
 
     system_settings = System_Settings.objects.get()
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(finding.test.engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        finding.test.engagement.product.id)
     return render(request, 'dojo/close_finding.html', {
         'finding': finding,
         'tab_product': tab_product,
@@ -377,7 +386,7 @@ def defect_finding_review(request, fid):
                 'Defect Reviewed',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_test', args=(finding.test.id, )))
+                reverse('view_test', args=(finding.test.id,)))
 
     else:
         form = DefectFindingForm()
@@ -388,7 +397,8 @@ def defect_finding_review(request, fid):
         top_level=False,
         request=request)
     system_settings = System_Settings.objects.get()
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(finding.test.engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        finding.test.engagement.product.id)
     return render(request, 'dojo/defect_finding_review.html', {
         'finding': finding,
         'tab_product': tab_product,
@@ -418,7 +428,7 @@ def reopen_finding(request, fid):
         messages.SUCCESS,
         'Finding closed.',
         extra_tags='alert-success')
-    return HttpResponseRedirect(reverse('view_finding', args=(finding.id, )))
+    return HttpResponseRedirect(reverse('view_finding', args=(finding.id,)))
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -438,7 +448,7 @@ def delete_finding(request, fid):
                 messages.SUCCESS,
                 'Finding deleted successfully.',
                 extra_tags='alert-success')
-            return HttpResponseRedirect(reverse('view_test', args=(tid, )))
+            return HttpResponseRedirect(reverse('view_test', args=(tid,)))
         else:
             messages.add_message(
                 request,
@@ -553,13 +563,19 @@ def edit_finding(request, fid):
                 except:
                     pass
             if source == "test":
-                return HttpResponseRedirect(reverse('view_test', args=(new_finding.test.id, )))
+                return HttpResponseRedirect(
+                    reverse('view_test', args=(new_finding.test.id,)))
             elif source == "product_findings":
-                return HttpResponseRedirect(reverse('product_open_findings', args=(new_finding.test.engagement.product.id, )) + '?test__engagement__product=' + str(new_finding.test.engagement.product.id) + page_value)
+                return HttpResponseRedirect(reverse('product_open_findings',
+                                                    args=(
+                                                        new_finding.test.engagement.product.id,)) + '?test__engagement__product=' + str(
+                    new_finding.test.engagement.product.id) + page_value)
             elif source == "all_product_findings":
-                return HttpResponseRedirect(reverse('open_findings') + '?' + page_value)
+                return HttpResponseRedirect(
+                    reverse('open_findings') + '?' + page_value)
             else:
-                return HttpResponseRedirect(reverse('view_finding', args=(new_finding.id, )))
+                return HttpResponseRedirect(
+                    reverse('view_finding', args=(new_finding.id,)))
         else:
             messages.add_message(
                 request,
@@ -577,7 +593,8 @@ def edit_finding(request, fid):
         parent=finding, title="Edit", top_level=False, request=request)
 
     system_settings = System_Settings.objects.get()
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(finding.test.engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        finding.test.engagement.product.id)
     return render(request, 'dojo/edit_findings.html', {
         'tab_product': tab_product,
         'tab_engagements': tab_engagements,
@@ -598,7 +615,7 @@ def touch_finding(request, fid):
     finding.last_reviewed = timezone.now()
     finding.last_reviewed_by = request.user
     finding.save()
-    return HttpResponseRedirect(reverse('view_finding', args=(finding.id, )))
+    return HttpResponseRedirect(reverse('view_finding', args=(finding.id,)))
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -632,9 +649,12 @@ def request_finding_review(request, fid):
 
             create_notification(event='review_requested',
                                 title='Finding review requested',
-                                description='User %s has requested that you please review the finding "%s" for accuracy:\n\n%s' % (user, finding.title, new_note),
+                                description='User %s has requested that you please review the finding "%s" for accuracy:\n\n%s' % (
+                                    user, finding.title, new_note),
                                 icon='check',
-                                url=request.build_absolute_uri(reverse("view_finding", args=(finding.id,))))
+                                url=request.build_absolute_uri(
+                                    reverse("view_finding",
+                                            args=(finding.id,))))
 
             messages.add_message(
                 request,
@@ -642,13 +662,14 @@ def request_finding_review(request, fid):
                 'Finding marked for review and reviewers notified.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_finding', args=(finding.id, )))
+                reverse('view_finding', args=(finding.id,)))
 
     else:
         form = ReviewFindingForm()
 
     system_settings = System_Settings.objects.get()
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(finding.test.engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        finding.test.engagement.product.id)
     add_breadcrumb(
         parent=finding,
         title="Review Finding",
@@ -707,7 +728,7 @@ def clear_finding_review(request, fid):
                 'Finding review has been updated successfully.',
                 extra_tags='alert-success')
             return HttpResponseRedirect(
-                reverse('view_finding', args=(finding.id, )))
+                reverse('view_finding', args=(finding.id,)))
 
     else:
         form = ClearFindingReviewForm(instance=finding)
@@ -751,9 +772,9 @@ def mktemplate(request, fid):
             messages.SUCCESS,
             mark_safe(
                 'Finding template added successfully. You may edit it <a href="%s">here</a>.'
-                % reverse('edit_template', args=(template.id, ))),
+                % reverse('edit_template', args=(template.id,))),
             extra_tags='alert-success')
-    return HttpResponseRedirect(reverse('view_finding', args=(finding.id, )))
+    return HttpResponseRedirect(reverse('view_finding', args=(finding.id,)))
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -835,10 +856,10 @@ def apply_template_to_finding(request, fid, tid):
             })
 
         return HttpResponseRedirect(
-            reverse('view_finding', args=(finding.id, )))
+            reverse('view_finding', args=(finding.id,)))
     else:
         return HttpResponseRedirect(
-            reverse('view_finding', args=(finding.id, )))
+            reverse('view_finding', args=(finding.id,)))
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -886,7 +907,7 @@ def add_stub_finding(request, tid):
             if request.is_ajax():
                 data = {
                     'message':
-                    'Stub Finding form has error, please revise and try again.',
+                        'Stub Finding form has error, please revise and try again.',
                 }
                 return HttpResponse(json.dumps(data))
 
@@ -896,7 +917,7 @@ def add_stub_finding(request, tid):
                 'Stub Finding form has error, please revise and try again.',
                 extra_tags='alert-danger')
     add_breadcrumb(title="Add Stub Finding", top_level=False, request=request)
-    return HttpResponseRedirect(reverse('view_test', args=(tid, )))
+    return HttpResponseRedirect(reverse('view_test', args=(tid,)))
 
 
 @user_passes_test(lambda u: u.is_staff)
@@ -916,7 +937,7 @@ def delete_stub_finding(request, fid):
                 messages.SUCCESS,
                 'Potential Finding deleted successfully.',
                 extra_tags='alert-success')
-            return HttpResponseRedirect(reverse('view_test', args=(tid, )))
+            return HttpResponseRedirect(reverse('view_test', args=(tid,)))
         else:
             messages.add_message(
                 request,
@@ -991,7 +1012,7 @@ def promote_to_finding(request, fid):
                 'Finding promoted successfully.',
                 extra_tags='alert-success')
 
-            return HttpResponseRedirect(reverse('view_test', args=(test.id, )))
+            return HttpResponseRedirect(reverse('view_test', args=(test.id,)))
         else:
             if 'endpoints' in form.cleaned_data:
                 form.fields['endpoints'].queryset = form.cleaned_data[
@@ -1134,6 +1155,21 @@ def finding_from_template(request, tid):
     template = get_object_or_404(Finding_Template, id=tid)
 
 
+def remove_finding_image_from_storage(finding_image):
+    for image in [finding_image.image,
+                  finding_image.image_thumbnail,
+                  finding_image.image_small,
+                  finding_image.image_medium,
+                  finding_image.image_large]:
+        if default_storage.exists(image.name):
+            try:
+                default_storage.delete(image.name)
+            except NotImplementedError:
+                logger.warning("The configured file storage "
+                               "backend was not able to delete "
+                               "file %s" % image.name)
+
+
 @user_passes_test(lambda u: u.is_staff)
 def manage_images(request, fid):
     finding = get_object_or_404(Finding, id=fid)
@@ -1148,48 +1184,36 @@ def manage_images(request, fid):
 
             images_formset.save()
 
-            for obj in images_formset.deleted_objects:
-                os.remove(settings.MEDIA_ROOT + obj.image.name)
-                if obj.image_thumbnail is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_thumbnail.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_thumbnail.name)
-                if obj.image_medium is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_medium.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_medium.name)
-                if obj.image_large is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_large.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_large.name)
+            for finding_image in images_formset.deleted_objects:
+                remove_finding_image_from_storage(finding_image)
 
-            for obj in images_formset.new_objects:
-                finding.images.add(obj)
+            for finding_image in images_formset.new_objects:
+                finding.images.add(finding_image)
 
-            orphan_images = FindingImage.objects.filter(finding__isnull=True)
-            for obj in orphan_images:
-                os.remove(settings.MEDIA_ROOT + obj.image.name)
-                if obj.image_thumbnail is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_thumbnail.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_thumbnail.name)
-                if obj.image_medium is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_medium.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_medium.name)
-                if obj.image_large is not None and os.path.isfile(
-                        settings.MEDIA_ROOT + obj.image_large.name):
-                    os.remove(settings.MEDIA_ROOT + obj.image_large.name)
-                obj.delete()
+            orphaned_images = FindingImage.objects.filter(finding__isnull=True)
+            for finding_image in orphaned_images:
+                remove_finding_image_from_storage(finding_image)
+                finding_image.delete()
 
-            files = os.listdir(settings.MEDIA_ROOT + 'finding_images')
+            files = default_storage.listdir(FindingImage.UPLOAD_DIRECTORY)
 
             for file in files:
-                with_media_root = settings.MEDIA_ROOT + 'finding_images/' + file
-                with_part_root_only = 'finding_images/' + file
-                if os.path.isfile(with_media_root):
+                image_path_under_media_root = os.path.join(
+                    FindingImage.UPLOAD_DIRECTORY, file)
+                if default_storage.exists(image_path_under_media_root):
                     pic = FindingImage.objects.filter(
-                        image=with_part_root_only)
+                        image=image_path_under_media_root)
 
                     if len(pic) == 0:
-                        os.remove(with_media_root)
-                        cache_to_remove = settings.MEDIA_ROOT + '/CACHE/images/finding_images/' + \
-                                          os.path.splitext(file)[0]
+                        default_storage.delete(image_path_under_media_root)
+
+                        # TODO: Clarify whether we actually write to this cache at some point; if not, this code is not used
+                        # CACHE is used by ImageSpecFields to generate thumbnails and images of different sizes. Clarify, whether there's not a more elegant method
+                        cache_to_remove = os.path.join('CACHE', 'images',
+                                                       FindingImage.UPLOAD_DIRECTORY,
+                                                       os.path.splitext(file)[
+                                                           0])
+                        # TODO: See above TODO about the cache mechanism for finding images
                         if os.path.isdir(cache_to_remove):
                             shutil.rmtree(cache_to_remove)
                     else:
@@ -1211,9 +1235,10 @@ def manage_images(request, fid):
                 extra_tags='alert-danger')
 
         if not error:
-            return HttpResponseRedirect(reverse('view_finding', args=(fid, )))
+            return HttpResponseRedirect(reverse('view_finding', args=(fid,)))
     system_settings = System_Settings.objects.get()
-    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(finding.test.engagement.product.id)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(
+        finding.test.engagement.product.id)
     return render(
         request, 'dojo/manage_images.html', {
             'tab_product': tab_product,
@@ -1260,7 +1285,8 @@ def download_finding_pic(request, token):
     except:
         raise PermissionDenied
 
-    response = StreamingHttpResponse(FileIterWrapper(open(sizes[size].path)))
+    response = StreamingHttpResponse(
+        FileIterWrapper(default_storage.open(sizes[size].path)))
     response['Content-Disposition'] = 'inline'
     mimetype, encoding = mimetypes.guess_type(sizes[size].name)
     response['Content-Type'] = mimetype
@@ -1281,18 +1307,21 @@ def finding_bulk_update_all(request, pid=None):
                 finds = Finding.objects.filter(id__in=finding_to_update)
                 if form.cleaned_data['severity']:
                     finds.update(severity=form.cleaned_data['severity'],
-                                 numerical_severity=Finding.get_numerical_severity(form.cleaned_data['severity']),
+                                 numerical_severity=Finding.get_numerical_severity(
+                                     form.cleaned_data['severity']),
                                  active=form.cleaned_data['active'],
                                  verified=form.cleaned_data['verified'],
                                  false_p=form.cleaned_data['false_p'],
                                  duplicate=form.cleaned_data['duplicate'],
-                                 out_of_scope=form.cleaned_data['out_of_scope'])
+                                 out_of_scope=form.cleaned_data[
+                                     'out_of_scope'])
                 else:
                     finds.update(active=form.cleaned_data['active'],
                                  verified=form.cleaned_data['verified'],
                                  false_p=form.cleaned_data['false_p'],
                                  duplicate=form.cleaned_data['duplicate'],
-                                 out_of_scope=form.cleaned_data['out_of_scope'])
+                                 out_of_scope=form.cleaned_data[
+                                     'out_of_scope'])
 
                 messages.add_message(request,
                                      messages.SUCCESS,
@@ -1304,6 +1333,7 @@ def finding_bulk_update_all(request, pid=None):
                                      'Unable to process bulk update. Required fields were not selected.',
                                      extra_tags='alert-danger')
     if pid:
-        return HttpResponseRedirect(reverse('product_open_findings', args=(pid)) + '?test__engagement__product=' + pid)
+        return HttpResponseRedirect(reverse('product_open_findings', args=(
+            pid)) + '?test__engagement__product=' + pid)
     else:
         return HttpResponseRedirect(reverse('open_findings', args=()))

@@ -84,6 +84,7 @@ components/*
 dojo/static/*
 !dojo/static/dojo/*
 dojo/media
+dojo/uploads
 /static
 /media
 
