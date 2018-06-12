@@ -7,11 +7,6 @@ from uuid import uuid4
 
 from django.conf import settings
 
-fmt = getattr(settings, 'LOG_FORMAT', None)
-lvl = getattr(settings, 'LOG_LEVEL', logging.DEBUG)
-
-logging.basicConfig(format=fmt, level=lvl)
-
 from watson import search as watson
 from auditlog.registry import auditlog
 from django.contrib import admin
@@ -19,7 +14,7 @@ from django.contrib.auth import get_user_model
 from django.core.urlresolvers import reverse
 from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models import Q, Count
+from django.db.models import Q
 from django.utils.timezone import now
 from imagekit.models import ImageSpecField
 from imagekit.processors import ResizeToCover
@@ -29,6 +24,12 @@ from tagging.registry import register as tag_register
 from multiselectfield import MultiSelectField
 import hashlib
 from django import forms
+
+fmt = getattr(settings, 'LOG_FORMAT', None)
+lvl = getattr(settings, 'LOG_LEVEL', logging.DEBUG)
+
+logging.basicConfig(format=fmt, level=lvl)
+
 
 class System_Settings(models.Model):
     enable_deduplication = models.BooleanField(
@@ -518,6 +519,14 @@ class CWE(models.Model):
     number = models.IntegerField()
 
 
+class Endpoint_Params(models.Model):
+    param = models.CharField(max_length=150)
+    value = models.CharField(max_length=150)
+    method_type = (('GET', 'GET'),
+                    ('POST', 'POST'))
+    method = models.CharField(max_length=20, blank=False, null=True, choices=method_type)
+
+
 class Endpoint(models.Model):
     protocol = models.CharField(null=True, blank=True, max_length=10,
                                 help_text="The communication protocol such as 'http', 'ftp', etc.")
@@ -537,6 +546,8 @@ class Endpoint(models.Model):
                                 help_text="The fragment identifier which follows the hash mark. The hash mark should "
                                           "be omitted. For example 'section-13', 'paragraph-2'.")
     product = models.ForeignKey(Product, null=True, blank=True, )
+    endpoint_params = models.ManyToManyField(Endpoint_Params, blank=True,
+                                             editable=False)
 
     class Meta:
         ordering = ['product', 'protocol', 'host', 'path', 'query', 'fragment']
@@ -920,18 +931,24 @@ class Finding(models.Model):
                 'url': reverse('view_finding', args=(self.id,))}]
         return bc
 
-        # def get_request(self):
-        #     if self.burprawrequestresponse_set.count() > 0:
-        #         reqres = BurpRawRequestResponse.objects.get(finding=self)
-        #         return base64.b64decode(reqres.burpRequestBase64)
-        #
-        # def get_response(self):
-        #     if self.burprawrequestresponse_set.count() > 0:
-        #         reqres = BurpRawRequestResponse.objects.get(finding=self)
-        #         res = base64.b64decode(reqres.burpResponseBase64)
-        #         # Removes all blank lines
-        #         res = re.sub(r'\n\s*\n', '\n', res)
-        #         return res
+    def get_report_requests(self):
+        if self.burprawrequestresponse_set.count() >= 3:
+            return BurpRawRequestResponse.objects.filter(finding=self)[0:3]
+        elif self.burprawrequestresponse_set.count() > 0:
+            return BurpRawRequestResponse.objects.filter(finding=self)
+
+    def get_request(self):
+        if self.burprawrequestresponse_set.count() > 0:
+            reqres = BurpRawRequestResponse.objects.filter(finding=self)[0]
+        return base64.b64decode(reqres.burpRequestBase64)
+
+    def get_response(self):
+        if self.burprawrequestresponse_set.count() > 0:
+            reqres = BurpRawRequestResponse.objects.filter(finding=self)[0]
+        res = base64.b64decode(reqres.burpResponseBase64)
+        # Removes all blank lines
+        res = re.sub(r'\n\s*\n', '\n', res)
+        return res
 
 
 Finding.endpoints.through.__unicode__ = lambda \
@@ -1044,10 +1061,10 @@ class BurpRawRequestResponse(models.Model):
     burpResponseBase64 = models.BinaryField()
 
     def get_request(self):
-        return base64.b64decode(self.burpRequestBase64)
+        return base64.b64decode(self.burpRequestBase64).decode("utf-8")
 
     def get_response(self):
-        res = base64.b64decode(self.burpResponseBase64)
+        res = base64.b64decode(self.burpResponseBase64).decode("utf-8")
         # Removes all blank lines
         res = re.sub(r'\n\s*\n', '\n', res)
         return res
@@ -1625,3 +1642,4 @@ admin.site.register(CWE)
 watson.register(Product)
 watson.register(Test)
 watson.register(Finding)
+watson.register(Finding_Template)
