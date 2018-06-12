@@ -15,7 +15,7 @@
                 {% if test.tags %}
                     <sup>
                         {% for tag in test.tags %}
-                        <a title="Search {{ tag }}" class="btn btn-tag btn-primary" href="{% url 'simple_search' %}?query={{ tag }}">{{ tag }}</a>
+                        <a title="Search {{ tag }}" class="tag-label tag-color" href="{% url 'simple_search' %}?query={{ tag }}">{{ tag }}</a>
                         {% endfor %}
                     </sup>
                 {% endif %}
@@ -73,16 +73,16 @@
         <div class="table-responsive">
             <table class="table-striped table table-condensed table-hover centered">
                 <tr>
-                    <th>Environment</th>
                     <th>Engagement</th>
-                    <th>Target Start Date</th>
-                    <th>Target End Date</th>
+                    <th>Environment</th>
+                    <th>Date</th>
                     {% if test.percent_complete > 0 %}
                         <th>Progress</th>
                     {% endif %}
 
                 </tr>
                 <tr>
+                    <td><a href="{% url 'view_engagement' test.engagement.id %}">{{ test.engagement }}</a></td>
                     <td>
                         {% if test.environment %}
                             {{ test.environment }}
@@ -90,9 +90,7 @@
                             <b><i>Unknown</i></b>
                         {% endif %}
                     </td>
-                    <td><a href="{% url 'view_engagement' test.engagement.id %}">{{ test.engagement }}</a></td>
-                    <td>{{ test.target_start.date }}</td>
-                    <td>{{ test.target_end.date }}</td>
+                    <td>{{ test.target_start.date }} - {{ test.target_end.date }}</td>
                     {% if test.percent_complete > 0 %}
                         <td>
                             <div class="progress">
@@ -120,7 +118,6 @@
                         Bulk Edit
                         <span class="caret"></span>
                     </button>
-
                     <a class="text-danger delete-bulk" href="#" alt="Delete Findings">
                         <i class="fa fa-trash"></i>
                     </a>
@@ -179,17 +176,12 @@
                                 <span class="icon-add-template"></span> Finding From Template
                             </a>
                         </li>
-
-
                     </ul>
                 </div>
             </div>
-
         </div>
         {% if findings %}
-            <table id="test_findings" class="table-bordered table table-condensed table-hover">
-
-
+            <table id="test_findings" class="table table-condensed table-hover">
                 <thead>
                 <tr>
                     <th class="hidden-sm centered" title="Select all visible findings.">
@@ -212,17 +204,16 @@
                             </ul>
                         </div>
                     </th>
-                    <th>Name</th>
-                    <th>Reporter</th>
-                    <th>Mitigation Date</th>
+                    <th></th>
                     <th>Severity</th>
-                    <th>Verified</th>
-                    <th>Active</th>
-                    <th>Duplicate</th>
+                    <th>Name</th>
+                    <th>Date</th>
+                    <th>Age</th>
+                    <th>Reporter</th>
+                    <th>Status</th>
                     {% if "enable_jira"|get_system_setting %}
                     <th>Jira</th>
                     {% endif %}
-                    <th>Actions</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -233,6 +224,94 @@
                                 <input type="checkbox" name="select_{{ finding.id }}" id="{{ finding.id }}"
                                        class="select_one {{ finding.severity }}"/>
                             </form>
+                        </td>
+                        <td>
+                            <ul>
+                             <li class="dropdown" style="list-style:none;">
+                                   <a href="#" class="dropdown-toggle" data-toggle="dropdown">&nbsp;<b class="fa fa-ellipsis-v"></b>&nbsp;</a>
+                                   <ul class="dropdown-menu">
+                                     <li>
+                                       <a class="" href="{% url 'view_finding' finding.id %}">
+                                         <i class="fa fa-arrow-circle-right"></i> View
+                                       </a>
+                                    </li>
+                                     <li>
+                                       <a class="" href="{% url 'edit_finding' finding.id %}?source=test">
+                                         <i class="fa fa-pencil-square-o"></i> Edit
+                                       </a>
+                                    </li>
+                                    <li class="divider"></li>
+                                    <li role="presentation">
+                                        <a href="{% url 'manage_images' finding.id %}">
+                                            <i class="fa fa-file-image-o"></i> Manage Images
+                                        </a>
+                                    </li>
+                                    {% if finding.under_review and dojo_user in finding.reviewers.all or dojo_user == finding.review_requested_by and finding.under_review %}
+                                        <li role="presentation">
+                                            <a href="{% url 'clear_finding_review' finding.id %}">
+                                                <i class="icon-user-check"></i> Clear Review
+                                            </a>
+                                        </li>
+                                    {% elif not finding.under_review %}
+                                        <li role="presentation">
+                                            <a href="{% url 'request_finding_review' finding.id %}">
+                                                <i class="icon-user-check"></i> Request Peer Review
+                                            </a>
+                                        </li>
+                                    {% endif %}
+
+                                    <li role="presentation">
+                                        <a href="{% url 'touch_finding' finding.id %}">
+                                            <i class="fa fa-clock-o"></i> Touch Finding
+                                        </a>
+                                    </li>
+                                    <li role="presentation">
+                                        <a href="{% url 'mktemplate' finding.id %}">
+                                            <i class="fa fa-copy"></i> Make Finding a Template
+                                        </a>
+                                    </li>
+                                    <li role="presentation">
+                                        <a href="{% url 'find_template_to_apply' finding.id %}">
+                                            <i class="fa fa-copy"></i> Apply Template to Finding
+                                        </a>
+                                    </li>
+                                    {% if finding.active %}
+                                        <li role="presentation">
+                                            <a href="{% url 'close_finding' finding.id %}">
+                                                <i class="fa fa-fire-extinguisher"></i> Close Finding
+                                            </a>
+                                        </li>
+                                    {% else %}
+                                        <li role="presentation">
+                                            <a href="{% url 'reopen_finding' finding.id %}">
+                                                <i class="fa fa-bug"></i> Open Finding
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                    <li role="presentation">
+                                        <a href="{% url 'action_history' finding|content_type finding.id %}">
+                                            <i class="fa fa-history"></i> View History
+                                        </a>
+                                    </li>
+                                    <li class="divider"></li>
+                                    <li>
+                                      <form method="post" action="{% url 'delete_finding' finding.id %}"
+                                           style="display: inline" class="form-inline form" id="delete-finding-menu-{{ finding.id }}-form">
+                                         {% csrf_token %}
+                                         <input type="hidden" name="id" value="{{ finding.id }}"/>
+                                      </form>
+                                      <a class="text-danger delete-finding" id="delete-finding-menu-{{ finding.id }}" href="#">
+                                        <i class="fa fa-trash"></i> Delete
+                                      </a>
+                                    </li>
+                                   </ul>
+                                 </li>
+                             </ul>
+                        </td>
+                        <td>
+                            <span class="label severity severity-{{ finding.severity }}">
+                                {{ finding.severity_display }}
+                            </span>
                         </td>
                         <td><a href="{% url 'view_finding' finding.id %}">{{ finding.title }}</a>
                           {% if finding.file_path %}
@@ -250,46 +329,30 @@
                           {% if finding.tags %}
                               <sup>
                                   {% for tag in finding.tags %}
-                                  <a title="Search {{ tag }}" class="btn btn-tag btn-primary" href="{% url 'simple_search' %}?query={{ tag }}">{{ tag }}</a>
+                                  <a title="Search {{ tag }}" class="tag-label tag-color" href="{% url 'simple_search' %}?query={{ tag }}">{{ tag }}</a>
                                   {% endfor %}
                               </sup>
                           {% endif %}
                         </td>
-                        <td>{{ finding.reporter.username }}</td>
-                        <td>{{ finding.mitigated }}</td>
+                        <td class="nowrap">{{ finding.date }}</td>
+                        <td>{{ finding.age }}</td>
                         <td>
-                            <span class="label severity severity-{{ finding.severity }}">
-                                {{ finding.severity_display }}
-                            </span>
+                          {% if finding.reporter.get_full_name and finding.reporter.get_full_name.strip %}
+                              {{ finding.reporter.get_full_name }}
+                          {% else %}
+                              {{ finding.reporter }}
+                          {% endif %}
                         </td>
-                        <td>{{ finding.verified }}</td>
-                        <td>{{ finding.active }}</td>
-                        {% if finding.duplicate %}
-                        <td><a href="{% url 'view_finding' finding.duplicate_finding.id%}">Original</a></td>
-                        {% else %}
-                            <td>False</td>
+                        <td>{% if finding.under_review %}Under Review, {% endif %}{{ finding.status }}</td>
+                        {% if finding.duplicate_finding.id %}
+                            <a href="{% url 'view_finding' finding.duplicate_finding.id%}">Original</a>
                         {% endif %}
+                        </td>
                         {% if "enable_jira"|get_system_setting %}
                         <td>
                         <a href="{{finding.jira_conf.url}}/browse/{{finding.jira.jira_key}}" target="_blank"> {{finding.jira.jira_key}} </a>
                         </td>
                         {% endif %}
-                        <td>
-                            <div class="btn-group">
-                                <a class="btn btn-sm btn-primary"
-                                   href="{% url 'view_finding' finding.id %}">View</a>
-                                <a class="btn btn-sm btn-warning"
-                                   href="{% url 'edit_finding' finding.id %}">Edit</a>
-                                <form method="post" action="{% url 'delete_finding' finding.id %}"
-                                     style="display: inline" class="form-inline form">
-                                   {% csrf_token %}
-                                   <input type="hidden" name="id" value="{{ finding.id }}"/>
-                                   <button type="submit" class="btn btn-danger btn-sm delete-finding">
-                                       Delete
-                                   </button>
-                               </form>
-                            </div>
-                        </td>
                     </tr>
                 {% endfor %}
                 </tbody>
@@ -329,7 +392,7 @@
             </div>
 
             <table id="stub_findings"
-                   class="table-bordered table table-condensed table-hover {% if not stub_findings %}hidden{% endif %}">
+                   class="table table-condensed table-hover {% if not stub_findings %}hidden{% endif %}">
 
                 <thead>
                 <tr>
@@ -347,7 +410,13 @@
                         <td>{% if finding.severity == "Critical" or finding.severity == "High" %}
                             <span class="text-error">
                         {% else %}<span>{% endif %}{{ finding.severity }}</span></td>
-                        <td>{{ finding.reporter.username }}</td>
+                        <td>
+                          {% if finding.reporter.get_full_name and finding.reporter.get_full_name.strip %}
+                              {{ finding.reporter.get_full_name }}
+                          {% else %}
+                              {{ finding.reporter }}
+                          {% endif %}
+                        </td>
                         <td>{{ finding.date }}</td>
                         <td>
                             <div class="btn-group">
@@ -532,6 +601,14 @@
     <script type="text/javascript" src="{% static "jquery-highlight/jquery.highlight.js" %}"></script>
     <script type="text/javascript">
         $(function () {
+            //Ensures dropdown has proper zindex
+            $('.table-responsive').on('show.bs.dropdown', function () {
+              $('.table-responsive').css( "overflow", "inherit" );
+            });
+
+            $('.table-responsive').on('hide.bs.dropdown', function () {
+              $('.table-responsive').css( "overflow", "auto" );
+            })
             $('input[type="checkbox"]').change(function () {
               finding = $(this).attr("name");
               if (finding.indexOf("select_") >= 0)
@@ -591,8 +668,16 @@
                 }
             });
 
+            $('[id^=delete-finding-menu-]').on('click', function () {
+              if (confirm('Are you sure you want to delete this finding?'))
+              {
+                  var form_element = "form#" + this.id + "-form";
+                  $( form_element ).submit();
+              }
+            });
+
             $('a.delete-bulk').on('click', function (e) {
-                if (confirm('Are you sure you want to delete this finding?'))
+                if (confirm('Are you sure you want to delete these findings?'))
                 {
                     var hidden_input = $('<input type="hidden" value="delete_bulk_findings" name="delete_bulk_findings">')
                     $('form#bulk_change_form').append(hidden_input);
@@ -626,7 +711,12 @@
             ;
 
 
-            $('form#quick-add-form').on("submit", function () {
+            $('form#quick-add-form').on("submit", function (e) {
+                if ($("input#quick_add_finding").val().length == 0) {
+                  alert('Potential finding description needs a value.');
+                  e.preventDefault();
+                  return false;
+                }
                 $('form#quick-add-form').removeClass("has-error");
                 $('button#the_button').attr('disabled', true).removeClass("btn-success btn-danger").addClass('btn-warning');
                 $('i#fa-icon').removeClass("fa-plus").addClass("fa-spinner fa-pulse");

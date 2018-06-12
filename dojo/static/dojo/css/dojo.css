@@ -2,10 +2,16 @@
 .h2,
 .h3,
 h1,
-h2,
-h3 {
+h2 {
     margin-top: 10px;
     margin-bottom: 10px;
+}
+
+h3 {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  font-size: 20px;
+  line-height: 22px;
 }
 
 .navbar-brand {
@@ -378,7 +384,7 @@ form ul#id_accepted_findings input {
 }
 
 .severity {
-    font-size: 100%;
+    font-size: 80%;
 }
 
 .severity-Info {
@@ -1164,6 +1170,12 @@ hr.report-page-break:before {
     text-decoration: none;
 }
 
+.tag-all {
+    background: #3498db;
+    text-decoration: none;
+}
+
+
 .A {
     background: #4ec83d;
 }
@@ -1181,9 +1193,51 @@ hr.report-page-break:before {
 }
 
 div.tags .label {
-    font-size: 90%;
+    font-size: 90;
     display: inline-block;
     padding: .6em .3em;
+}
+
+.tag-label {
+    display: inline;
+    padding: .2em .6em .3em;
+    font-size: 11px;
+    color: #fff;
+    border-radius: .25em;
+    text-decoration: none;
+    text-decoration-style: solid;
+}
+
+.tag-color {
+    background: #556270;
+}
+
+.happy-green-color {
+    color: green;
+}
+
+.warning-color {
+    background: red;
+}
+
+.tag-label:link {
+    color: white;
+    text-decoration: none;
+}
+
+.tag-label:hover {
+    color: white;
+    text-decoration: none;
+}
+
+.tag-label:active {
+    color: white;
+    text-decoration: none;
+}
+
+.tag-label:visited {
+    color: white;
+    text-decoration: none;
 }
 
 @media (min-width: 768px) {
@@ -1216,4 +1270,41 @@ div.tags .label {
 mark{
     background: orange;
     color: black;
+}
+
+.btn-overdue {
+    border-radius: 2px;
+    border-color: #ddd;
+    color: #ffffff;
+    background: #ef251e;
+    padding: 2px 2px 2px 2px;
+    font-size: 90%;
+}
+
+.bg-vuln-critical {
+  background-color:#D43F3A
+}
+.bg-vuln-high {
+  background-color:#D57A1D
+}
+.bg-vuln-medium {
+  background-color:#E4AB18
+}
+.bg-vuln-low {
+  background-color:#4CAE4C
+}
+.bg-vuln-info {
+  background-color:#357ABD
+}
+.bg-muted {
+  background-color:#777
+}
+.vuln-count {
+  color:#fff;
+  font-size:18px;
+  font-weight: 700;
+}
+small {
+  font-size:12px;
+  font-weight:400;
 }

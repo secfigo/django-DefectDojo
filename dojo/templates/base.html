@@ -13,7 +13,7 @@
     <meta name="description" content="">
     <meta name="author" content="">
     <title>
-        {% if request.session.dojo_breadcrumbs %}
+        {% if request.session.dojo_breadcrumbs and not active_tab %}
             {% with request.session.dojo_breadcrumbs|last as last %}
                 {{ last.title }}
             {% endwith %}
@@ -35,12 +35,6 @@
     <!-- Custom Fonts -->
     <link href="{% static "font-awesome/css/font-awesome.min.css" %}" rel="stylesheet" type="text/css">
 
-    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
-    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
-    <!--[if lt IE 9]>
-        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
-        <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
-    <![endif]-->
     {% block add_css %}
     {% endblock %}
     <link rel="stylesheet" href="{% static "jquery-ui/themes/flick/jquery-ui.min.css" %}">
@@ -111,10 +105,13 @@
                                 <li><a href="{% url 'view_profile' %}"><i
                                         class="fa fa-user fa-fw"></i> {{ request.user.username }}</a>
                                 </li>
-                                <li><a href="{% url 'api_key' %}"><i class="fa fa-fw fa-key"></i> API Key</a></li>
+                                <li><a href="{% url 'api_key' %}"><i class="fa fa-fw fa-key"></i> API v1 Key</a></li>
+                                <li><a href="{% url 'api_v2_key' %}"><i class="fa fa-fw fa-key"></i> API v2 Key</a></li>
                             {% endif %}
                             <li><a href="{% url 'tastypie_swagger:index' %}"><i class="fa fa-book fa-fw"></i> API
-                                Docs</a></li>
+                                v1 Docs</a></li>
+                            <li><a href="{% url 'api_v2_schema' %}"><i class="fa fa-book fa-fw"></i> API
+                                v2 Docs</a></li>
                         {% endblock %}
                         {% if request.user.is_authenticated %}
                             <li><a href="{% url 'logout' %}"><i class="fa fa-sign-out fa-fw"></i> Logout</a></li>
@@ -247,16 +244,16 @@
                                     <a href="{% url 'jira' %}"><i class="fa fa-cog fa-fw"></i>
                                         <span>Configuration</span></a>
                                     <ul class="nav nav-second-level">
-                                        <li><a href="{% url 'notifications' %}">Notifications </a></li>
-                                        {% if request.user.is_superuser%}
-                                        <li><a href="{% url 'system_settings' %}">System Settings </a></li>
-                                        {% endif %}
                                         <li><a href="{% url 'cred' %}">Credential Manager </a></li>
                                         {% if "enable_jira"|get_system_setting %}
                                         <li><a href="{% url 'jira' %}">JIRA </a></li>
                                         {% endif %}
                                         <li><a href="{% url 'tool_config' %}">Tool Configuration </a></li>
                                         <li><a href="{% url 'tool_type' %}">Tool Type </a></li>
+                                        <li><a href="{% url 'notifications' %}">Notifications </a></li>
+                                        {% if request.user.is_superuser %}
+                                        <li><a href="{% url 'system_settings' %}">System Settings </a></li>
+                                        {% endif %}
                                     </ul>
                                 </li>
 
@@ -278,6 +275,134 @@
     <!-- Page Content -->
     <div id="page-wrapper">
         <div class="container-fluid">
+            <!-- start of tabs -->
+            {% if active_tab %}
+            <div class="row">
+              <div class="col-md-12">
+                <h3 class="no-margin-top">
+                    {{ tab_product }}
+                    {% if system_settings.enable_benchmark == 9 %}
+                      {% for benchmark in tab_benchmarks%}
+                        <sup><span class="fa fa-bookmark has-popover" data-trigger="hover" data-content="{{ benchmark|asvs_level }}"></label></span>
+                        {{ benchmark.desired_level }}</sup>
+                      {% endfor %}
+                    {% endif %}
+                    {% with grade=tab_product|product_grade %}
+                      {% if grade %}
+                        <sup><div class="tag-label {{ grade }}">{{ grade }}</div></sup>
+                      {% endif %}
+                    {% endwith %}
+                    {% if tab_product.tags %}
+                      <sup>
+                          {% for tag in tab_product.tags %}
+                          <a title="Search {{ tag }}" class="tag-label tag-color" href="{% url 'simple_search' %}?query={{ tag }}">{{ tag }}</a>
+                          {% endfor %}
+                      </sup>
+                    {% endif %}
+                    <!--
+                    <small>{{ prod.endpoint_count }}
+                        <a href="{% url 'vulnerable_endpoints' %}?product={{ prod.id }}">
+                            affected endpoint{{ prod.endpoint_count|pluralize }}
+                            <i class="fa fa-arrow-circle-right"></i></a>
+                    </small>-->
+                </h3>
+                <br>
+                <ul class="nav nav-tabs horizontal-bar">
+                  <li role="presentation"{% if active_tab == 'overview' %} class="active"{% endif %}><a href="{% url 'view_product' tab_product.id %}"><span class="fa fa-globe" aria-hidden="true"></span><span class="hidden-xs"> Overview</span></a></li>
+                  <li role="presentation"{% if active_tab == 'metrics' %} class="active"{% endif %}><a href="{% url 'view_product_metrics' tab_product.id %}"><span class="fa fa-bar-chart" aria-hidden="true"></span><span class="hidden-xs"> Metrics</span></a></li>
+
+                  <li role="presentation" class="dropdown{% if active_tab == 'engagements' %} active{% endif %}">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href=""><span class="fa fa-calendar" aria-hidden="true"></span>
+                    <span class="hidden-xs"> Engagements{% if tab_engagements.all|length > 0 %} <span class="badge">{{ tab_engagements.all|length }}</span>{% endif %}</span>
+                    <span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                      <li><a href="{% url 'view_engagements' tab_product.id %}"><i class="fa fa-calendar"></i> View Engagements</a></li>
+                      <li role="separator" class="divider"></li>
+                      <li><a href="{% url 'new_eng_for_prod' tab_product.id %}"><i class="fa fa-plus"></i> Add New Engagement</a></li>
+                    </ul>
+                  </li>
+
+                  <li role="presentation" class="dropdown{% if active_tab == 'findings' %} active{% endif %}">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href=""><span class="fa fa-bug" aria-hidden="true"></span>
+                    <span class="hidden-xs"> Findings{% if tab_findings|length > 0 %} <span class="badge">{{ tab_findings.all|length }}</span>{% endif %}</span>
+                    <span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                      <li><a href="{% url 'product_open_findings' tab_product.id %}?test__engagement__product={{ tab_product.id }}"><i class="fa fa-list-alt"></i> View Open Findings</a></li>
+                      <li><a href="{% url 'product_open_findings' tab_product.id %}?test__engagement__product={{ tab_product.id }}&severity=Critical"><i class="fa fa-exclamation-triangle"></i> View Critical Findings</a></li>
+                      <li><a href="{% url 'product_open_findings' tab_product.id %}?test__engagement__product={{ tab_product.id }}&date=1"><i class="fa fa-calendar"></i> View Last 7 Days Findings</a></li>
+                      <li role="separator" class="divider"></li>
+                      <li><a href="{% url 'ad_hoc_finding' tab_product.id %}"><i class="fa fa-plus"></i> Add New Finding</a></li>
+                    </ul>
+                  </li>
+                  <!-- Endpoints Tab -->
+                  <li role="presentation" class="dropdown{% if active_tab == 'endpoints' %} active{% endif %}">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href=""><span class="fa fa-sitemap" aria-hidden="true"></span>
+                    <span class="hidden-xs"> Endpoints{% if tab_endpoints > 0 %} <span class="badge">{{ tab_endpoints }}</span>{% endif %}</span>
+                    <span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                      <li><a href="{% url 'endpoints' %}?product={{ tab_product.id }}"><i class="fa fa-list-alt"></i> View Endpoints</a></li>
+                      <li><a href="{% url 'vulnerable_endpoints' %}?product={{ tab_product.id }}"><i class="fa fa-sitemap"></i> View Vulnerable Endpoints</a></li>
+                      <li role="separator" class="divider"></li>
+                      <li><a href="{% url 'product_endpoint_report' tab_product.id %}"><i class="fa fa-file-text-o"></i> Endpoint Report</a></li>
+                      <li role="separator" class="divider"></li>
+                      <li><a href="{% url 'add_endpoint' tab_product.id %}"><i class="fa fa-plus"></i> Add New Endpoint</a></li>
+                    </ul>
+                  </li>
+                  <!-- Benchmarks Tab -->
+                  {% if system_settings.enable_benchmark %}
+                  <li role="presentation" class="dropdown{% if active_tab == 'benchmarks' %} active{% endif %}">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href=""><span class="fa fa-balance-scale" aria-hidden="true"></span>
+                    <span class="hidden-xs"> Benchmarks{% if tab_endpoints > 0 %} <span class="badge"></span>{% endif %}</span>
+                    <span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                      {% for bt in tab_benchmarks %}
+                      <a title="{{ bt.name }}" href="{% url 'view_product_benchmark' tab_product.id bt.id %}">
+                          <li><span class="fa fa-list"></span> {{ bt.name }} {{ bt.version }}</a></li>
+                      {% endfor %}
+                    </ul>
+                  </li>
+                  {% endif %}
+                  <li role="presentation" class="dropdown{% if active_tab == 'settings' %} active{% endif %}">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href=""><span class="fa fa-cogs" aria-hidden="true"></span>
+                      <span class="hidden-xs"> Settings</span>
+                    <span class="caret"></span></a>
+                    <ul class="dropdown-menu">
+                      {% if user.is_staff %}
+                        <li role="presentation">
+                            <a class="" href="{% url 'edit_product' tab_product.id %}">
+                                <i class="fa fa-pencil-square-o"></i> Edit
+                            </a>
+                        </li>
+                        <li role="presentation">
+                            <a class="" href="{% url 'add_meta_data' tab_product.id %}">
+                                <i class="fa fa-list-alt"></i> Add Metadata
+                            </a>
+                        </li>
+                        <li role="presentation">
+                            <a class="" href="{% url 'new_object' tab_product.id %}">
+                                <i class="fa fa-list-alt"></i> Add Product Tracking Files
+                            </a>
+                        </li>
+                        <li role="separator" class="divider"></li>
+                        <li role="presentation">
+                            <a href="{% url 'action_history' tab_product|content_type tab_product.id %}">
+                                <i class="fa fa-history"></i> View History
+                            </a>
+                        </li>
+                            <li role="separator" class="divider"></li>
+                            <li role="presentation">
+                                <a class="text-danger" href="{% url 'delete_product' tab_product.id %}">
+                                    <i class="fa fa-trash"></i> Delete
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                  </li>
+
+                </ul>
+              </div>
+            </div>
+            {% else %}
             <div class="row hidden-xs">
                 <div class="col-lg-12">
                     {% if request.session.dojo_breadcrumbs %}
@@ -291,9 +416,9 @@
                         </ul>
                     {% endif %}
                 </div>
-                <!-- /.col-lg-12 -->
             </div>
-            <!-- /.row -->
+            {% endif %}
+            <!-- end of tabs -->
             <div class="row">
                 <div class="col-lg-12">
                     {% if messages %}

@@ -1,11 +1,9 @@
 # #  tests
 
 import logging
-import sys
 import operator
 from datetime import datetime
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
@@ -20,11 +18,10 @@ from dojo.filters import TemplateFindingFilter
 from dojo.forms import NoteForm, TestForm, FindingForm, \
     DeleteTestForm, AddFindingForm, \
     ImportScanForm, ReImportScanForm, FindingBulkUpdateForm, JIRAFindingForm
-from dojo.models import Finding, Test, Notes, \
-    BurpRawRequestResponse, Endpoint, Stub_Finding, Finding_Template, JIRA_PKey, Cred_User, Cred_Mapping, Dojo_User
+from dojo.models import Finding, Test, Notes, System_Settings, \
+    BurpRawRequestResponse, Endpoint, Stub_Finding, Finding_Template, JIRA_PKey, Cred_Mapping, Dojo_User
 from dojo.tools.factory import import_parser_factory
-from dojo.utils import get_page_items, add_breadcrumb, get_cal_event, message, \
-                       process_notifications, get_system_setting, create_notification
+from dojo.utils import get_page_items, add_breadcrumb, get_cal_event, message, process_notifications, get_system_setting, create_notification, tab_view_count
 from dojo.tasks import add_issue_task
 
 logger = logging.getLogger(__name__)
@@ -39,10 +36,11 @@ def view_test(request, tid):
         raise PermissionDenied
     notes = test.notes.all()
     person = request.user.username
-    findings = Finding.objects.filter(test=test)
+    findings = Finding.objects.filter(test=test).order_by('severity')
     stub_findings = Stub_Finding.objects.filter(test=test)
     cred_test = Cred_Mapping.objects.filter(test=test).select_related('cred_id').order_by('cred_id')
     creds = Cred_Mapping.objects.filter(engagement=test.engagement).select_related('cred_id').order_by('cred_id')
+    system_settings = System_Settings.objects.get()
 
     if request.method == 'POST' and request.user.is_staff:
         form = NoteForm(request.POST)
@@ -54,7 +52,7 @@ def view_test(request, tid):
             test.notes.add(new_note)
             form = NoteForm()
             url = request.build_absolute_uri(reverse("view_test", args=(test.id,)))
-            title="Test: %s on %s" % (test.test_type.name, test.engagement.product.name)
+            title = "Test: %s on %s" % (test.test_type.name, test.engagement.product.name)
             process_notifications(request, new_note, url, title)
             messages.add_message(request,
                                  messages.SUCCESS,
@@ -68,8 +66,16 @@ def view_test(request, tid):
     show_re_upload = any(test.test_type.name in code for code in ImportScanForm.SCAN_TYPE_CHOICES)
 
     add_breadcrumb(parent=test, top_level=False, request=request)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(prod.id)
     return render(request, 'dojo/view_test.html',
                   {'test': test,
+                   'active_tab': 'engagements',
+                   'tab_product': tab_product,
+                   'tab_engagements': tab_engagements,
+                   'tab_findings': tab_findings,
+                   'tab_endpoints': tab_endpoints,
+                   'tab_benchmarks': tab_benchmarks,
+                   'system_settings': system_settings,
                    'findings': fpage,
                    'stub_findings': sfpage,
                    'form': form,
@@ -97,14 +103,23 @@ def edit_test(request, tid):
                                  messages.SUCCESS,
                                  'Test saved.',
                                  extra_tags='alert-success')
+            return HttpResponseRedirect(reverse('view_engagement', args=(test.engagement.id,)))
 
     form.initial['target_start'] = test.target_start.date()
     form.initial['target_end'] = test.target_end.date()
     form.initial['tags'] = [tag.name for tag in test.tags]
 
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(test.engagement.product.id)
+    system_settings = System_Settings.objects.get()
     add_breadcrumb(parent=test, title="Edit", top_level=False, request=request)
     return render(request, 'dojo/edit_test.html',
                   {'test': test,
+                   'tab_product': tab_product,
+                   'tab_engagements': tab_engagements,
+                   'tab_findings': tab_findings,
+                   'tab_endpoints': tab_endpoints,
+                   'tab_benchmarks': tab_benchmarks,
+                   'active_tab': 'engagements',
                    'form': form,
                    })
 
@@ -135,8 +150,16 @@ def delete_test(request, tid):
                 return HttpResponseRedirect(reverse('view_engagement', args=(eng.id,)))
 
     add_breadcrumb(parent=test, title="Delete", top_level=False, request=request)
+    tab_product, tab_engagements, tab_findings, tab_endpoints, tab_benchmarks = tab_view_count(test.engagement.product.id)
+    system_settings = System_Settings.objects.get()
     return render(request, 'dojo/delete_test.html',
                   {'test': test,
+                   'tab_product': tab_product,
+                   'tab_engagements': tab_engagements,
+                   'tab_findings': tab_findings,
+                   'tab_endpoints': tab_endpoints,
+                   'tab_benchmarks': tab_benchmarks,
+                   'active_tab': 'engagements',
                    'form': form,
                    'rels': rels,
                    'deletable_objects': rels,
@@ -161,11 +184,11 @@ def delete_test_note(request, tid, nid):
 @user_passes_test(lambda u: u.is_staff)
 @cache_page(60 * 5)  # cache for 5 minutes
 def test_calendar(request):
-    if not 'lead' in request.GET or '0' in request.GET.getlist('lead'):
+    if 'lead' not in request.GET or '0' in request.GET.getlist('lead'):
         tests = Test.objects.all()
     else:
         filters = []
-        leads = request.GET.getlist('lead','')
+        leads = request.GET.getlist('lead', '')
         if '-1' in request.GET.getlist('lead'):
             leads.remove('-1')
             filters.append(Q(lead__isnull=True))
@@ -177,6 +200,7 @@ def test_calendar(request):
         'leads': request.GET.getlist('lead', ''),
         'tests': tests,
         'users': Dojo_User.objects.all()})
+
 
 @user_passes_test(lambda u: u.is_staff)
 def test_ics(request, tid):
@@ -405,7 +429,7 @@ def search(request, tid):
 @user_passes_test(lambda u: u.is_staff)
 def finding_bulk_update(request, tid):
     test = get_object_or_404(Test, id=tid)
-    finding = test.finding_set.all()[0]
+    # finding = test.finding_set.all()[0]
     form = FindingBulkUpdateForm(request.POST)
     if request.method == "POST":
         finding_to_update = request.POST.getlist('finding_to_update')
@@ -596,7 +620,7 @@ def re_import_scan_results(request, tid):
                                                                  'mitigated') + '. Please manually verify each one.',
                                          extra_tags='alert-success')
 
-                create_notification(event='results_added', title='Results added', finding_count=finding_count, test=t, engagement=engagement, url=request.build_absolute_uri(reverse('view_test', args=(t.id,))))
+                create_notification(event='results_added', title=str(finding_count) + " findings for " + engagement.product.name, finding_count=finding_count, test=t, engagement=engagement, url=request.build_absolute_uri(reverse('view_test', args=(t.id,))))
 
                 return HttpResponseRedirect(reverse('view_test', args=(t.id,)))
             except SyntaxError:

@@ -103,7 +103,7 @@ class MonthYearWidget(Widget):
         if not (self.required and value):
             month_choices.append(self.none_value)
         month_choices.sort()
-        local_attrs = self.build_attrs({'id':self.month_field % id_})
+        local_attrs = self.build_attrs({'id': self.month_field % id_})
         s = Select(choices=month_choices)
         select_html = s.render(self.month_field % name, month_val, local_attrs)
 
@@ -180,7 +180,7 @@ class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
         fields = ['name', 'description', 'tags', 'prod_manager', 'tech_contact', 'manager', 'prod_type',
-                  'authorized_users']
+                  'authorized_users', 'business_criticality', 'platform', 'lifecycle', 'origin', 'user_records', 'revenue', 'external_audience', 'internet_accessible']
 
 
 class DeleteProductForm(forms.ModelForm):
@@ -191,7 +191,9 @@ class DeleteProductForm(forms.ModelForm):
         model = Product
         exclude = ['name', 'description', 'prod_manager', 'tech_contact', 'manager', 'created',
                    'prod_type', 'updated', 'tid', 'authorized_users', 'product_manager',
-                   'technical_contact', 'team_manager']
+                   'technical_contact', 'team_manager', 'prod_numeric_grade', 'business_criticality',
+                   'platform', 'lifecycle', 'origin', 'user_records', 'revenue', 'external_audience',
+                   'internet_accessible']
 
 
 class ProductMetaDataForm(forms.ModelForm):
@@ -224,19 +226,28 @@ class Product_TypeProductForm(forms.ModelForm):
 
 
 class ImportScanForm(forms.Form):
-    SCAN_TYPE_CHOICES = (("", "Please Select a Scan Type"),("Burp Scan", "Burp Scan"), ("Nessus Scan", "Nessus Scan"), ("Nmap Scan", "Nmap Scan"),
+    SCAN_TYPE_CHOICES = (("", "Please Select a Scan Type"),
+                         ("Burp Scan", "Burp Scan"),
+                         ("Nessus Scan", "Nessus Scan"),
+                         ("Nmap Scan", "Nmap Scan"),
                          ("Nexpose Scan", "Nexpose Scan"),
-                         ("AppSpider Scan", "AppSpider Scan"), ("Veracode Scan", "Veracode Scan"),
-                         ("Checkmarx Scan", "Checkmarx Scan"), ("ZAP Scan", "ZAP Scan"),
-                         ("Arachni Scan", "Arachni Scan"), ("VCG Scan", "VCG Scan"),
-                         ("Dependency Check Scan", "Dependency Check Scan"), ("Retire.js Scan", "Retire.js Scan"),
+                         ("AppSpider Scan", "AppSpider Scan"),
+                         ("Veracode Scan", "Veracode Scan"),
+                         ("Checkmarx Scan", "Checkmarx Scan"),
+                         ("ZAP Scan", "ZAP Scan"),
+                         ("Arachni Scan", "Arachni Scan"),
+                         ("VCG Scan", "VCG Scan"),
+                         ("Dependency Check Scan", "Dependency Check Scan"),
+                         ("Retire.js Scan", "Retire.js Scan"),
                          ("Node Security Platform Scan", "Node Security Platform Scan"),
                          ("Qualys Scan", "Qualys Scan"),
                          ("Qualys Webapp Scan", "Qualys Webapp Scan"),
                          ("OpenVAS CSV", "OpenVAS CSV"),
                          ("Snyk Scan", "Snyk Scan"),
                          ("Generic Findings Import", "Generic Findings Import"),
-                         ("SKF Scan", "SKF Scan"), ("Bandit Scan", "Bandit Scan"), ("SSL Labs Scan", "SSL Labs Scan"))
+                         ("SKF Scan", "SKF Scan"),
+                         ("Bandit Scan", "Bandit Scan"),
+                         ("SSL Labs Scan", "SSL Labs Scan"))
     SORTED_SCAN_TYPE_CHOICES = sorted(SCAN_TYPE_CHOICES, key=lambda x: x[1])
 
     scan_date = forms.DateTimeField(
@@ -454,17 +465,27 @@ class EngForm(forms.ModelForm):
                   "listings.")
     description = forms.CharField(widget=forms.Textarea(attrs={}),
                                   required=False)
+    tags = forms.CharField(widget=forms.SelectMultiple(choices=[]),
+                           required=False,
+                           help_text="Add tags that help describe this engagement.  "
+                                     "Choose from the list or add new tags.  Press TAB key to add.")
     target_start = forms.DateField(widget=forms.TextInput(
         attrs={'class': 'datepicker'}))
     target_end = forms.DateField(widget=forms.TextInput(
         attrs={'class': 'datepicker'}))
-    threat_model = forms.BooleanField(required=False)
-    api_test = forms.BooleanField(required=False, label='API Test')
-    pen_test = forms.BooleanField(required=False)
+    # threat_model = forms.BooleanField(required=False)
+    # api_test = forms.BooleanField(required=False, label='API Test')
+    # pen_test = forms.BooleanField(required=False)
     lead = forms.ModelChoiceField(
         queryset=User.objects.exclude(is_staff=False),
         required=True, label="Testing Lead")
     test_strategy = forms.URLField(required=False, label="Test Strategy URL")
+
+    def __init__(self, *args, **kwargs):
+        tags = Tag.objects.usage_for_model(Engagement)
+        t = [(tag.name, tag.name) for tag in tags]
+        super(EngForm, self).__init__(*args, **kwargs)
+        self.fields['tags'].widget.choices = t
 
     def is_valid(self):
         valid = super(EngForm, self).is_valid()
@@ -482,7 +503,7 @@ class EngForm(forms.ModelForm):
         model = Engagement
         exclude = ('first_contacted', 'version', 'eng_type', 'real_start',
                    'real_end', 'requester', 'reason', 'updated', 'report_type',
-                   'product')
+                   'product', 'threat_model', 'api_test', 'pen_test', 'check_list')
 
 
 class EngForm2(forms.ModelForm):
@@ -542,7 +563,7 @@ class DeleteEngagementForm(forms.ModelForm):
         exclude = ['name', 'version', 'eng_type', 'first_contacted', 'target_start',
                    'target_end', 'lead', 'requester', 'reason', 'report_type',
                    'product', 'test_strategy', 'threat_model', 'api_test', 'pen_test',
-                   'check_list', 'status']
+                   'check_list', 'status', 'description']
 
 
 class TestForm(forms.ModelForm):
@@ -611,8 +632,7 @@ class AddFindingForm(forms.ModelForm):
     def clean(self):
         # self.fields['endpoints'].queryset = Endpoint.objects.all()
         cleaned_data = super(AddFindingForm, self).clean()
-        if ((cleaned_data['active'] or cleaned_data['verified'])
-            and cleaned_data['duplicate']):
+        if ((cleaned_data['active'] or cleaned_data['verified']) and cleaned_data['duplicate']):
             raise forms.ValidationError('Duplicate findings cannot be'
                                         ' verified or active')
         if cleaned_data['false_p'] and cleaned_data['verified']:
@@ -650,8 +670,7 @@ class AdHocFindingForm(forms.ModelForm):
     def clean(self):
         # self.fields['endpoints'].queryset = Endpoint.objects.all()
         cleaned_data = super(AdHocFindingForm, self).clean()
-        if ((cleaned_data['active'] or cleaned_data['verified'])
-            and cleaned_data['duplicate']):
+        if ((cleaned_data['active'] or cleaned_data['verified']) and cleaned_data['duplicate']):
             raise forms.ValidationError('Duplicate findings cannot be'
                                         ' verified or active')
         if cleaned_data['false_p'] and cleaned_data['verified']:
@@ -764,12 +783,7 @@ class ApplyFindingTemplateForm(forms.Form):
 
     cwe = forms.IntegerField(label="CWE", required=False)
 
-    severity = forms.ChoiceField(
-            required=False,
-            choices=SEVERITY_CHOICES,
-            error_messages={
-                'required': 'Select valid choice: In Progress, On Hold, Completed',
-                'invalid_choice': 'Select valid choice: Critical,High,Medium,Low'})
+    severity = forms.ChoiceField(required=False, choices=SEVERITY_CHOICES, error_messages={'required': 'Select valid choice: In Progress, On Hold, Completed', 'invalid_choice': 'Select valid choice: Critical,High,Medium,Low'})
 
     description = forms.CharField(widget=forms.Textarea)
     mitigation = forms.CharField(widget=forms.Textarea)
@@ -792,8 +806,10 @@ class ApplyFindingTemplateForm(forms.Form):
         return cleaned_data
 
     class Meta:
-        fields = ['title',  'cwe', 'severity', 'description', 'mitigation', 'impact', 'references']
+        fields = ['title', 'cwe', 'severity', 'description', 'mitigation', 'impact', 'references']
         order = ('title', 'cwe', 'severity', 'description', 'impact')
+
+
 class FindingTemplateForm(forms.ModelForm):
     title = forms.CharField(max_length=1000, required=True)
     tags = forms.CharField(widget=forms.SelectMultiple(choices=[]),
@@ -1044,6 +1060,8 @@ class DeleteEndpointForm(forms.ModelForm):
     class Meta:
         model = Endpoint
         exclude = ('protocol',
+                   'fqdn',
+                   'port',
                    'host',
                    'path',
                    'query',
@@ -1277,7 +1295,7 @@ class ReportOptionsForm(forms.Form):
     include_finding_images = forms.ChoiceField(choices=yes_no, label="Finding Images")
     include_executive_summary = forms.ChoiceField(choices=yes_no, label="Executive Summary")
     include_table_of_contents = forms.ChoiceField(choices=yes_no, label="Table of Contents")
-    report_type = forms.ChoiceField(choices=(('AsciiDoc', 'AsciiDoc'),('HTML', 'HTML'), ('PDF', 'PDF')))
+    report_type = forms.ChoiceField(choices=(('AsciiDoc', 'AsciiDoc'), ('HTML', 'HTML'), ('PDF', 'PDF')))
 
 
 class CustomReportOptionsForm(forms.Form):
@@ -1296,6 +1314,7 @@ class DeleteReportForm(forms.ModelForm):
         model = Report
         fields = ('id',)
 
+
 class DeleteFindingForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
                             widget=forms.widgets.HiddenInput())
@@ -1303,6 +1322,7 @@ class DeleteFindingForm(forms.ModelForm):
     class Meta:
         model = Finding
         fields = ('id',)
+
 
 class DeleteStubFindingForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
@@ -1312,6 +1332,7 @@ class DeleteStubFindingForm(forms.ModelForm):
         model = Stub_Finding
         fields = ('id',)
 
+
 class AddFindingImageForm(forms.ModelForm):
     class Meta:
         model = FindingImage
@@ -1320,11 +1341,13 @@ class AddFindingImageForm(forms.ModelForm):
 
 FindingImageFormSet = modelformset_factory(FindingImage, extra=3, max_num=10, exclude=[''], can_delete=True)
 
+
 class JIRA_IssueForm(forms.ModelForm):
 
     class Meta:
         model = JIRA_Issue
         exclude = ['product']
+
 
 class JIRAForm(forms.ModelForm):
     password = forms.CharField(widget=forms.PasswordInput, required=True)
@@ -1333,11 +1356,13 @@ class JIRAForm(forms.ModelForm):
         model = JIRA_Conf
         exclude = ['product']
 
+
 class Benchmark_Product_SummaryForm(forms.ModelForm):
 
     class Meta:
         model = Benchmark_Product_Summary
         exclude = ['product', 'current_level', 'benchmark_type', 'asvs_level_1_benchmark', 'asvs_level_1_score', 'asvs_level_2_benchmark', 'asvs_level_2_score', 'asvs_level_3_benchmark', 'asvs_level_3_score']
+
 
 class DeleteBenchmarkForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
@@ -1347,11 +1372,13 @@ class DeleteBenchmarkForm(forms.ModelForm):
         model = Benchmark_Product_Summary
         exclude = ['product', 'benchmark_type', 'desired_level', 'current_level', 'asvs_level_1_benchmark', 'asvs_level_1_score', 'asvs_level_2_benchmark', 'asvs_level_2_score', 'asvs_level_3_benchmark', 'asvs_level_3_score', 'publish']
 
+
 class JIRA_PKeyForm(forms.ModelForm):
 
     class Meta:
         model = JIRA_PKey
         exclude = ['product']
+
 
 class DeleteJIRAConfForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
@@ -1367,24 +1394,29 @@ class ToolTypeForm(forms.ModelForm):
         model = Tool_Type
         exclude = ['product']
 
+
 class LanguagesTypeForm(forms.ModelForm):
     class Meta:
         model = Languages
         exclude = ['product']
+
 
 class Languages_TypeTypeForm(forms.ModelForm):
     class Meta:
         model = Language_Type
         exclude = ['product']
 
+
 class App_AnalysisTypeForm(forms.ModelForm):
     class Meta:
         model = App_Analysis
         exclude = ['product']
 
+
 class ToolConfigForm(forms.ModelForm):
     tool_type = forms.ModelChoiceField(queryset=Tool_Type.objects.all(), label='Tool Type')
     ssh = forms.CharField(widget=forms.Textarea(attrs={}), required=False, label='SSH Key')
+
     class Meta:
         model = Tool_Configuration
         exclude = ['product']
@@ -1394,7 +1426,7 @@ class ToolConfigForm(forms.ModelForm):
         form_data = self.cleaned_data
 
         try:
-            url_validator = URLValidator(schemes=['ssh','http', 'https'])
+            url_validator = URLValidator(schemes=['ssh', 'http', 'https'])
             url_validator(form_data["url"])
         except forms.ValidationError:
             raise forms.ValidationError(
@@ -1403,6 +1435,7 @@ class ToolConfigForm(forms.ModelForm):
 
         return form_data
 
+
 class DeleteObjectsSettingsForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
                             widget=forms.widgets.HiddenInput())
@@ -1410,6 +1443,7 @@ class DeleteObjectsSettingsForm(forms.ModelForm):
     class Meta:
         model = Objects
         exclude = ['tool_type']
+
 
 class DeleteToolProductSettingsForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
@@ -1434,7 +1468,7 @@ class ToolProductSettingsForm(forms.ModelForm):
         form_data = self.cleaned_data
 
         try:
-            url_validator = URLValidator(schemes=['ssh','http', 'https'])
+            url_validator = URLValidator(schemes=['ssh', 'http', 'https'])
             url_validator(form_data["url"])
         except forms.ValidationError:
             raise forms.ValidationError(
@@ -1442,6 +1476,7 @@ class ToolProductSettingsForm(forms.ModelForm):
                 code='invalid')
 
         return form_data
+
 
 class ObjectSettingsForm(forms.ModelForm):
 
@@ -1489,11 +1524,13 @@ class SystemSettingsForm(forms.ModelForm):
         model = System_Settings
         exclude = ['product_grade']
 
+
 class BenchmarkForm(forms.ModelForm):
 
     class Meta:
         model = Benchmark_Product
         exclude = ['product', 'control']
+
 
 class Benchmark_RequirementForm(forms.ModelForm):
 
@@ -1501,11 +1538,13 @@ class Benchmark_RequirementForm(forms.ModelForm):
         model = Benchmark_Requirement
         exclude = ['']
 
+
 class NotificationsForm(forms.ModelForm):
 
     class Meta:
         model = Notifications
         exclude = ['']
+
 
 class CredUserForm(forms.ModelForm):
     # selenium_script = forms.FileField(widget=forms.widgets.FileInput(
