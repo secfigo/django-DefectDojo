@@ -16,9 +16,9 @@ export CONTAINER_NAME=dojo
 docker build -t $REPO .
 
 # Launch one container per service
-container_id_worker=$(docker run -d --entrypoint=celery $REPO worker -A dojo -l info -c 1 -P solo)
-container_id_beat=$(docker run -d --entrypoint=celery $REPO beat -A dojo -l info)
-container_id_server=$(docker run -d --entrypoint=python $REPO manage.py runserver 0.0.0.0:8000)
+container_id_worker=$(docker run --env DJANGO_SETTINGS_MODULE=dojo.settings.unittest -d --entrypoint=celery $REPO worker -A dojo -l info -c 1 -P solo)
+container_id_beat=$(docker run --env DJANGO_SETTINGS_MODULE=dojo.settings.unittest -d --entrypoint=celery $REPO beat -A dojo -l info)
+container_id_server=$(docker run --env DJANGO_SETTINGS_MODULE=dojo.settings.unittest -d --entrypoint=python $REPO manage.py runserver 0.0.0.0:8000)
 
 # Wait for the container to spin up and gie it some time to fail
 sleep 10
